@@ -1,0 +1,74 @@
+/* Glass-Box C2 — custom display surfaces that are not component-library
+   territory: the SVG situation picture and the forensic log rows.
+   Everything else is shadcn/ui components + Tailwind utilities (v4). */
+
+/* ---------- situation map (SVG) ---------- */
+.map-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.map-bg {
+  fill: #12151b;
+}
+
+.map-grid {
+  stroke: #232833;
+  stroke-width: 0.25;
+}
+
+.map-boundary {
+  fill: none;
+  stroke: #3a4152;
+  stroke-width: 0.5;
+  stroke-dasharray: 3 2;
+}
+
+.map-annot {
+  fill: #5c6472;
+  font-family: var(--mono);
+  font-size: 3.2px;
+  letter-spacing: 0.6px;
+}
+
+.map-label {
+  fill: var(--text);
+  font-family: var(--mono);
+  font-size: 3.6px;
+  font-weight: 700;
+}
+
+.map-stale {
+  fill: var(--warn);
+  font-family: var(--mono);
+  font-size: 2.8px;
+  font-weight: 700;
+}
+
+/* ---------- forensic log ---------- */
+.log-kind {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.log-kind.event {
+  color: var(--muted-foreground);
+}
+.log-kind.inject {
+  color: var(--bad);
+}
+.log-kind.comms {
+  color: var(--warn);
+}
+.log-kind.recommendation {
+  color: var(--neon);
+}
+.log-kind.operator {
+  color: var(--good);
+}
+.log-kind.system {
+  color: var(--friendly);
+}
