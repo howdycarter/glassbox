@@ -1,8 +1,10 @@
 import type {
+  AdvisorMode,
   DecisionDef,
   DecisionRecord,
   LogEntry,
   Mode,
+  ModelLogEntry,
   PriorityWeights,
   ScenarioDef,
   TrackEffect,
@@ -11,6 +13,7 @@ import type {
 import { DEFAULT_SCENARIO, SCENARIOS_BY_ID } from '../data/scenarios';
 import { computeConfidence } from './recommender';
 import { DEFAULT_WEIGHTS, describeWeightChanges, weightsEqual } from './prioritization';
+import { buildAdvisorPrompt, getAdvisorExchange, serializeAdvisorResponse } from './advisor';
 
 /* Scenario engine: a deterministic reducer. Events fire off the scenario
    clock; decision events pause the clock until the operator acts. Every
@@ -40,9 +43,22 @@ export interface GameState {
       re-weighting is a deliberate operator act and is logged with its
       effect on any pending recommendation; live slider movement is not. */
   committedWeights: PriorityWeights;
+  /** Model Advisor mode (hackathon build): Live / Cached / Deterministic.
+      Operator console state like the display mode — persists across
+      Reset and vignette switches. Default: Cached (the demo-safe rung
+      of the failure ladder; the full demo runs from it with no key). */
+  advisorMode: AdvisorMode;
+  /** Forensic model log: one entry per Advisor exchange — full prompt
+      and raw response, labeled by source. Run state; cleared on Reset. */
+  modelLog: ModelLogEntry[];
+  modelLogSeq: number;
 }
 
-export function initialState(mode: Mode = 'glass', scenario: ScenarioDef = DEFAULT_SCENARIO): GameState {
+export function initialState(
+  mode: Mode = 'glass',
+  scenario: ScenarioDef = DEFAULT_SCENARIO,
+  advisorMode: AdvisorMode = 'cached',
+): GameState {
   const tracks: Record<string, TrackState> = {};
   for (const t of scenario.initialTracks) {
     tracks[t.id] = { ...t, stale: false, visible: true };
@@ -62,6 +78,9 @@ export function initialState(mode: Mode = 'glass', scenario: ScenarioDef = DEFAU
     linkDegraded: false,
     weights: structuredClone(DEFAULT_WEIGHTS),
     committedWeights: structuredClone(DEFAULT_WEIGHTS),
+    advisorMode,
+    modelLog: [],
+    modelLogSeq: 0,
   };
 }
 
@@ -97,6 +116,7 @@ export type Action =
   | { type: 'RESET' }
   | { type: 'SET_SCENARIO'; scenarioId: string }
   | { type: 'SET_MODE'; mode: Mode }
+  | { type: 'SET_ADVISOR_MODE'; advisorMode: AdvisorMode }
   | { type: 'SET_WEIGHTS_LIVE'; weights: PriorityWeights }
   | { type: 'COMMIT_WEIGHTS' }
   | { type: 'RESOLVE'; action: 'accept' | 'override'; reason: string | null; latencySec: number };
@@ -105,6 +125,22 @@ export function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
     case 'SET_MODE':
       return { ...state, mode: action.mode };
+
+    case 'SET_ADVISOR_MODE': {
+      if (action.advisorMode === state.advisorMode) return state;
+      // Console state (like the display mode): switching the Advisor
+      // mode mid-run affects decision points issued from now on;
+      // exchanges already logged stand as issued.
+      return pushLog(
+        { ...state, advisorMode: action.advisorMode },
+        'system',
+        state.clock,
+        `Model Advisor mode set to ${action.advisorMode.toUpperCase()}.` +
+          (action.advisorMode === 'deterministic'
+            ? ' The Advisor is silent; the deterministic core runs alone (v4 baseline).'
+            : ' The deterministic core remains the recommendation of record.'),
+      );
+    }
 
     case 'SET_WEIGHTS_LIVE':
       // Slider movement: state updates so every surface responds at once,
@@ -143,7 +179,7 @@ export function reducer(state: GameState, action: Action): GameState {
       // Loading a vignette starts a fresh run of it. Weights are operator
       // console state and carry over, as on Reset; the log says which
       // vignette was loaded so the new run's record is unambiguous.
-      const fresh = initialState(state.mode, scenario);
+      const fresh = initialState(state.mode, scenario, state.advisorMode);
       const withWeights: GameState = {
         ...fresh,
         weights: state.weights,
@@ -159,7 +195,7 @@ export function reducer(state: GameState, action: Action): GameState {
     }
 
     case 'RESET': {
-      const fresh = initialState(state.mode, state.scenario);
+      const fresh = initialState(state.mode, state.scenario, state.advisorMode);
       // Weights are operator console state and persist across a reset,
       // like the display mode; the reset log entry says so when they are
       // not at defaults, so the new run's record stays honest.
@@ -215,6 +251,8 @@ export function reducer(state: GameState, action: Action): GameState {
                 confidenceShown: conf.value,
                 correct: null,
                 latencySec: null,
+                advisorVerdict: null,
+                advisorAgrees: null,
               },
             ],
           };
@@ -227,6 +265,50 @@ export function reducer(state: GameState, action: Action): GameState {
             ev.t,
             `${def.id} issued — "${def.recommendation}" Confidence ${conf.value}%. Input snapshot: ${snapshot}.`,
           );
+
+          // Model Advisor — additive second voice, in parallel. The
+          // exchange is recorded on the decision record (for the
+          // debrief's second score) and in the forensic model log
+          // (full prompt + raw response). The core record above is
+          // untouched by anything the Advisor says.
+          const exchange = getAdvisorExchange(s.advisorMode, state.scenario, def);
+          if (exchange) {
+            s = {
+              ...s,
+              records: s.records.map((r) =>
+                r.decisionId === def.id
+                  ? {
+                      ...r,
+                      advisorVerdict: exchange.output.verdict,
+                      advisorAgrees: exchange.output.agreesWithCore,
+                    }
+                  : r,
+              ),
+              modelLog: [
+                ...s.modelLog,
+                {
+                  seq: s.modelLogSeq,
+                  t: ev.t,
+                  key: exchange.key,
+                  source: exchange.source,
+                  model: exchange.model,
+                  prompt: buildAdvisorPrompt(state.scenario, def),
+                  response: serializeAdvisorResponse(exchange.output, exchange.source),
+                  latencyMs: null,
+                },
+              ],
+              modelLogSeq: s.modelLogSeq + 1,
+            };
+            s = pushLog(
+              s,
+              'advisor',
+              ev.t,
+              `Model Advisor (${exchange.source}) on ${def.id}: ${exchange.output.verdict.toUpperCase()} — ${exchange.output.headline}` +
+                (exchange.output.agreesWithCore
+                  ? ' Concurs with the core recommendation.'
+                  : ' CONTRADICTION FLAG: the Advisor disagrees with the core recommendation — both positions stand for the operator.'),
+            );
+          }
         }
 
         if (ev.kind === 'endex') {

@@ -72,3 +72,6 @@
 .log-kind.system {
   color: var(--friendly);
 }
+.log-kind.advisor {
+  color: var(--warn);
+}

@@ -134,7 +134,7 @@ export interface ScenarioDef {
 export interface LogEntry {
   seq: number;
   t: number;
-  kind: 'event' | 'inject' | 'comms' | 'recommendation' | 'operator' | 'system';
+  kind: 'event' | 'inject' | 'comms' | 'recommendation' | 'operator' | 'system' | 'advisor';
   text: string;
 }
 
@@ -161,6 +161,65 @@ export interface PriorityWeights {
   factors: FactorWeights;
 }
 
+/* ---- Model Advisor (hackathon build) ----
+   A second, additive voice beside the deterministic core. The core's
+   recommendation is always the recommendation of record; the Advisor
+   never re-scores, overrides, or edits it. See SPEC.md / README. */
+
+export type AdvisorMode = 'live' | 'cached' | 'deterministic';
+
+/**
+ * Where an Advisor output actually came from, after the failure ladder:
+ * 'live' = a real Meta Model API response; 'cached' = the authored cache
+ * in src/data/advisor-cache.ts, disclosed on screen as cached.
+ * 'deterministic' mode has no Advisor output at all (null source).
+ */
+export type AdvisorSource = 'live' | 'cached';
+
+export type AdvisorVerdict = 'concur' | 'lean-alternate' | 'disagree';
+
+export interface AdvisorOutput {
+  verdict: AdvisorVerdict;
+  /** The bold verdict line, e.g. "Concur — designate HOSTILE." */
+  headline: string;
+  /** Reasoning bullets, in the shape DecisionPanel renders. */
+  reasoning: string[];
+  /** The Advisor's own read of how much its verdict should be trusted. */
+  confidenceRead: string;
+  /** Decision input ids this output rests on (provenance citations). */
+  citations: string[];
+  /** True when the verdict concurs with the core recommendation. */
+  agreesWithCore: boolean;
+}
+
+/** One Advisor output as issued at a decision point (forensic record). */
+export interface AdvisorExchange {
+  /** `${scenarioId}:${decisionId}` */
+  key: string;
+  scenarioId: string;
+  decisionId: string;
+  source: AdvisorSource;
+  /** Model of record for live output; target model for cached output. */
+  model: string;
+  output: AdvisorOutput;
+}
+
+/** Forensic model log entry: the full prompt + raw response, per exchange. */
+export interface ModelLogEntry {
+  seq: number;
+  /** Scenario clock minute at issue. */
+  t: number;
+  key: string;
+  source: AdvisorSource;
+  model: string;
+  /** The exact prompt the live integration sends (built from scenario state). */
+  prompt: string;
+  /** Raw response text: the serialized Advisor output, labeled by source. */
+  response: string;
+  /** Live-call latency when measured; null for cached output. */
+  latencyMs: number | null;
+}
+
 export interface DecisionRecord {
   decisionId: string;
   title: string;
@@ -172,4 +231,10 @@ export interface DecisionRecord {
   correct: boolean | null;
   /** Real seconds the operator spent with the recommendation open. */
   latencySec: number | null;
+  /** Model Advisor verdict at this decision point, when the Advisor was
+      active (null in Deterministic mode). Reported in the debrief
+      ALONGSIDE — never instead of — the core's reliance scoring. */
+  advisorVerdict: AdvisorVerdict | null;
+  /** Whether the Advisor concurred with the core recommendation. */
+  advisorAgrees: boolean | null;
 }

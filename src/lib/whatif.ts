@@ -103,6 +103,11 @@ export function projectBranch(
     linkDegraded: false,
     weights: structuredClone(DEFAULT_WEIGHTS),
     committedWeights: structuredClone(DEFAULT_WEIGHTS),
+    // The Advisor never speaks inside a projection either — a What-If
+    // branch is a picture simulation, not a decision point.
+    advisorMode: 'deterministic',
+    modelLog: [],
+    modelLogSeq: 0,
   };
   const effects = action === 'accept' ? def.onAccept : def.onOverride;
   const after = applyEffects(shell, effects).tracks;
