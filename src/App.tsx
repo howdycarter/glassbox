@@ -147,7 +147,7 @@ export default function App() {
           </ToggleGroup>
           <p className="px-2 pt-2 text-[11px] leading-snug text-muted-foreground">
             {state.advisorMode === 'live'
-              ? 'Live Model requested. Until the verified live call is wired, the ladder serves disclosed cached output — never an unlabeled substitute.'
+              ? 'Live Model requested. The live client is wired behind VITE_META_MODEL_API_KEY; until a keyed call succeeds, the ladder serves disclosed cached output — never an unlabeled substitute.'
               : state.advisorMode === 'cached'
                 ? 'Cached Advisor output (authored fallback, labeled on screen). The whole demo runs from this rung — no key, no network.'
                 : 'Advisor silent. The deterministic core runs alone — the v4 baseline.'}
@@ -351,6 +351,7 @@ export default function App() {
                 decision={state.pending}
                 exchange={advisorExchange}
                 advisorMode={state.advisorMode}
+                displayMode={state.mode}
                 coreConfidence={issuedConfidence}
                 clock={state.clock}
               />

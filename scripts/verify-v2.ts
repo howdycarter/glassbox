@@ -27,7 +27,16 @@
    M. Model Advisor (hackathon build): cache completeness for all 10
       decision points, honesty labels (cached is never labeled live),
       agreement scoring alongside — never instead of — core scoring,
-      deterministic-mode silence, and SSR smoke for the new surfaces. */
+      deterministic-mode silence, SSR smoke for the new surfaces, and
+      the Black-Box mute (the ablation takes the second voice off the
+      glass too).
+   M5. The live ladder (advisor-live.ts) with mocked transports — zero
+      network: request shape against the documented API contract, a
+      parsed live success labeled 'live', and HTTP / malformed /
+      network / timeout failures all degrading to the disclosed cache
+      with the failure recorded, never silent. The API shape itself is
+      UNVERIFIED until the Day-1 spike; these assertions lock the
+      ladder's behavior and the documented shape, not the real API. */
 
 import React from 'react';
 import { renderToString } from 'react-dom/server';
@@ -51,7 +60,18 @@ import LogPanel from '../src/components/LogPanel';
 import PrioritizationPanel from '../src/components/PrioritizationPanel';
 import WhatIfPanel from '../src/components/WhatIfPanel';
 import { ADVISOR_CACHE } from '../src/data/advisor-cache';
-import { advisorAgreement, advisorKey, getAdvisorExchange } from '../src/lib/advisor';
+import {
+  ADVISOR_MODEL_ID,
+  advisorAgreement,
+  advisorKey,
+  getAdvisorExchange,
+} from '../src/lib/advisor';
+import {
+  parseAdvisorResponse,
+  resolveAdvisorExchange,
+  type AdvisorTransport,
+  type LiveRequest,
+} from '../src/lib/advisor-live';
 import type { AdvisorMode } from '../src/types';
 
 let passed = 0;
@@ -635,6 +655,7 @@ const advisorHtml = renderToString(
     decision: DECISIONS.DP4,
     exchange: dp4Exchange,
     advisorMode: 'cached' as const,
+    displayMode: 'glass' as const,
     coreConfidence: 57,
     clock: 22,
   }),
@@ -649,11 +670,30 @@ const advisorSilentHtml = renderToString(
     decision: DECISIONS.DP1,
     exchange: null,
     advisorMode: 'deterministic' as const,
+    displayMode: 'glass' as const,
     coreConfidence: 80,
     clock: 6,
   }),
 );
 check('AdvisorPanel explains itself in deterministic mode', advisorSilentHtml.includes('Advisor is muted'));
+const advisorBlackHtml = renderToString(
+  React.createElement(AdvisorPanel, {
+    decision: DECISIONS.DP4,
+    exchange: dp4Exchange,
+    advisorMode: 'cached' as const,
+    displayMode: 'black' as const,
+    coreConfidence: 57,
+    clock: 22,
+  }),
+);
+check(
+  'Black-Box mode mutes the Advisor panel — the second voice leaves the glass',
+  advisorBlackHtml.includes('not on the glass') && advisorBlackHtml.includes('forensic model log'),
+);
+check(
+  'Black-Box Advisor panel leaks no verdict, headline, or reasoning',
+  !advisorBlackHtml.includes('Lean ACT') && !advisorBlackHtml.includes('Contradiction flag'),
+);
 const modelLogHtml = renderToString(
   React.createElement(LogPanel, { log: good.log, modelLog: good.modelLog }),
 );
@@ -677,5 +717,192 @@ check(
     goodDebrief.replace(/<!-- -->/g, '').includes('concurred on 4 of 5'),
 );
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) process.exit(1);
+console.log('M5. Live ladder with mocked transports (zero network; API shape UNVERIFIED)');
+const LIVE_REPLY = [
+  'Verdict: concur',
+  'Headline: Concur — designate HOSTILE.',
+  'Reasoning:',
+  '- Three independent feeds agree and none is stale.',
+  '- The custody window is the cost of waiting.',
+  'Confidence read: High.',
+  'Citations: dp1-uas, dp1-radar, dp1-not-a-real-input',
+  'Agrees with core: yes',
+].join('\n');
+function okTransport(capture?: (req: LiveRequest) => void): AdvisorTransport {
+  return async (req) => {
+    capture?.(req);
+    return {
+      status: 200,
+      json: { model: ADVISOR_MODEL_ID, choices: [{ message: { content: LIVE_REPLY } }] },
+    };
+  };
+}
+async function sectionM5() {
+  let captured: LiveRequest | null = null;
+  const liveRes = await resolveAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1, {
+    apiKey: 'test-key-not-real',
+    transport: okTransport((req) => {
+      captured = req;
+    }),
+  });
+  check(
+    'live request targets the documented endpoint with bearer auth (shape locked, API UNVERIFIED)',
+    captured !== null &&
+      captured.url === 'https://api.meta.ai/v1/chat/completions' &&
+      captured.headers.Authorization === 'Bearer test-key-not-real',
+    captured ? `url=${captured.url}` : 'transport never called',
+  );
+  check(
+    'live request body carries the configured model id and the contracted prompt',
+    captured !== null &&
+      captured.body.model === ADVISOR_MODEL_ID &&
+      captured.body.messages[0].content.includes('DP1') &&
+      captured.body.messages[0].content.includes('Verdict: <concur'),
+  );
+  check(
+    'a parsed live reply is labeled source=live — the only path to that label',
+    liveRes !== null && liveRes.exchange.source === 'live' && liveRes.liveError === null,
+    `got source=${liveRes?.exchange.source} liveError=${liveRes?.liveError}`,
+  );
+  check(
+    'live reply parses to the render contract (verdict, headline, reasoning, confidence read)',
+    liveRes !== null &&
+      liveRes.exchange.output.verdict === 'concur' &&
+      liveRes.exchange.output.headline.includes('HOSTILE') &&
+      liveRes.exchange.output.reasoning.length === 2 &&
+      liveRes.exchange.output.confidenceRead === 'High.' &&
+      liveRes.exchange.output.agreesWithCore === true,
+  );
+  check(
+    'live citations are filtered to inputs the operator can see (bogus id dropped)',
+    liveRes !== null &&
+      liveRes.exchange.output.citations.join(',') === 'dp1-uas,dp1-radar',
+    `got ${liveRes?.exchange.output.citations.join(',')}`,
+  );
+  check(
+    'live resolution carries the verbatim raw reply and a measured latency for the model log',
+    liveRes !== null &&
+      liveRes.rawResponse === LIVE_REPLY &&
+      typeof liveRes.latencyMs === 'number' &&
+      liveRes.latencyMs >= 0,
+  );
+
+  const noKey = await resolveAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1, {
+    apiKey: null,
+  });
+  check(
+    'Live mode with no key degrades to the disclosed cache, reason recorded',
+    noKey !== null &&
+      noKey.exchange.source === 'cached' &&
+      (noKey.liveError ?? '').includes('no Meta Model API key'),
+    `got source=${noKey?.exchange.source} liveError=${noKey?.liveError}`,
+  );
+
+  const httpFail = await resolveAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1, {
+    apiKey: 'test-key-not-real',
+    transport: async () => ({ status: 500, json: null }),
+  });
+  check(
+    'HTTP failure degrades to cache with the failure stage recorded (never a silent swap)',
+    httpFail !== null &&
+      httpFail.exchange.source === 'cached' &&
+      (httpFail.liveError ?? '').startsWith('http:'),
+    `got liveError=${httpFail?.liveError}`,
+  );
+
+  const malformed = await resolveAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1, {
+    apiKey: 'test-key-not-real',
+    transport: async () => ({
+      status: 200,
+      json: { choices: [{ message: { content: 'I think you should probably concur here.' } }] },
+    }),
+  });
+  check(
+    'a reply outside the output contract degrades to cache (parse stage recorded)',
+    malformed !== null &&
+      malformed.exchange.source === 'cached' &&
+      (malformed.liveError ?? '').startsWith('parse:'),
+    `got liveError=${malformed?.liveError}`,
+  );
+
+  const netFail = await resolveAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1, {
+    apiKey: 'test-key-not-real',
+    transport: async () => {
+      throw new Error('socket hang up');
+    },
+  });
+  check(
+    'a transport throw degrades to cache (network stage recorded)',
+    netFail !== null &&
+      netFail.exchange.source === 'cached' &&
+      (netFail.liveError ?? '').startsWith('network:'),
+    `got liveError=${netFail?.liveError}`,
+  );
+
+  const timedOut = await resolveAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1, {
+    apiKey: 'test-key-not-real',
+    transport: () => new Promise(() => {}),
+    timeoutMs: 25,
+  });
+  check(
+    'a transport that never answers degrades on the timeout, signal ignored or not',
+    timedOut !== null &&
+      timedOut.exchange.source === 'cached' &&
+      (timedOut.liveError ?? '').startsWith('timeout:'),
+    `got liveError=${timedOut?.liveError}`,
+  );
+
+  const cachedRes = await resolveAdvisorExchange('cached', DEFAULT_SCENARIO, DECISIONS.DP1, {
+    apiKey: 'test-key-not-real',
+    transport: async () => {
+      throw new Error('cached mode must never touch the transport');
+    },
+  });
+  check(
+    'Cached mode via the ladder is the cache itself and never touches the network',
+    cachedRes !== null && cachedRes.exchange.source === 'cached' && cachedRes.liveError === null,
+  );
+  check(
+    'Deterministic mode via the ladder stays silent',
+    (await resolveAdvisorExchange('deterministic', DEFAULT_SCENARIO, DECISIONS.DP1, {
+      apiKey: 'test-key-not-real',
+      transport: okTransport(),
+    })) === null,
+  );
+  check(
+    'parser derives agreesWithCore from the verdict when the explicit line is absent',
+    parseAdvisorResponse(
+      [
+        'Verdict: disagree',
+        'Headline: Disagree — hold.',
+        'Reasoning:',
+        '- The picture is stale.',
+        'Citations: dp1-uas',
+      ].join('\n'),
+      DECISIONS.DP1,
+    )?.agreesWithCore === false,
+  );
+  check(
+    'parser rejects a reply whose citations are all unresolvable (provenance break)',
+    parseAdvisorResponse(
+      [
+        'Verdict: concur',
+        'Headline: Concur.',
+        'Reasoning:',
+        '- Sounds right.',
+        'Citations: not-an-input, also-not-an-input',
+      ].join('\n'),
+      DECISIONS.DP1,
+    ) === null,
+  );
+}
+
+sectionM5()
+  .then(() => {
+    console.log(`\n${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exit(1);
+  })
+  .catch((err) => {
+    console.error('M5 section threw:', err);
+    process.exit(1);
+  });

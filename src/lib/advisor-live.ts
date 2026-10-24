@@ -274,12 +274,22 @@ export async function fetchLiveAdvisorOutput(opts: {
   const prompt = buildAdvisorPrompt(opts.scenario, opts.decision);
   const req = buildLiveRequest(prompt, opts.apiKey);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // The timeout races the transport rather than relying on the
+  // transport to honor the abort signal — a transport that ignores
+  // the signal must still degrade on schedule, not hang the ladder.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new LiveAdvisorError(`live call timed out after ${timeoutMs} ms`, 'timeout'));
+    }, timeoutMs);
+  });
   const started = Date.now();
   let res: LiveResponse;
   try {
-    res = await transport(req, controller.signal);
+    res = await Promise.race([transport(req, controller.signal), timeoutPromise]);
   } catch (err) {
+    if (err instanceof LiveAdvisorError) throw err;
     throw new LiveAdvisorError(
       controller.signal.aborted
         ? `live call timed out after ${timeoutMs} ms`
@@ -287,7 +297,7 @@ export async function fetchLiveAdvisorOutput(opts: {
       controller.signal.aborted ? 'timeout' : 'network',
     );
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
   const latencyMs = Date.now() - started;
   if (res.status < 200 || res.status >= 300) {

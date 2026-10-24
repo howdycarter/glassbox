@@ -1,11 +1,11 @@
-import { Bot, GitCompareArrows, ShieldAlert } from 'lucide-react';
+import { Bot, EyeOff, GitCompareArrows, ShieldAlert } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { PanelShell, SectionLabel } from './Panel';
 import { fmtClock } from '../lib/engine';
 import { cn } from '@/lib/utils';
-import type { AdvisorExchange, AdvisorMode, DecisionDef } from '../types';
+import type { AdvisorExchange, AdvisorMode, DecisionDef, Mode } from '../types';
 
 /* The Model Advisor panel — a second, additive voice beside the
    deterministic core. It renders in the same shape as the decision
@@ -13,7 +13,11 @@ import type { AdvisorExchange, AdvisorMode, DecisionDef } from '../types';
    but it is NOT the recommendation of record: the core above is.
    Where the two disagree, the contradiction flag shows both
    positions side by side and the operator decides.
-   Cached output is disclosed as cached, on screen, every time. */
+   Cached output is disclosed as cached, on screen, every time.
+   In Black-Box display mode the panel is muted like every other
+   instrument — the ablation is honest only if the second voice
+   leaves the glass too. The exchange is still written to the
+   forensic model log; it is the operator's surface that goes dark. */
 
 const VERDICT_LABEL = {
   concur: 'CONCUR',
@@ -25,15 +29,30 @@ export default function AdvisorPanel({
   decision,
   exchange,
   advisorMode,
+  displayMode,
   coreConfidence,
   clock,
 }: {
   decision: DecisionDef | null;
   exchange: AdvisorExchange | null;
   advisorMode: AdvisorMode;
+  displayMode: Mode;
   coreConfidence: number | null;
   clock: number;
 }) {
+  if (displayMode === 'black') {
+    return (
+      <PanelShell title="MODEL ADVISOR" sub="black-box mode · instruments off" className="border-dashed">
+        <p className="flex items-start gap-2 text-sm text-muted-foreground">
+          <EyeOff className="mt-0.5 size-4 shrink-0" />
+          Black-Box mode: the Advisor's read is not on the glass — no verdict, no reasoning,
+          nothing to audit at decision time. The exchange is still written to the forensic model
+          log; it just cannot help the operator when the decision is made.
+        </p>
+      </PanelShell>
+    );
+  }
+
   if (advisorMode === 'deterministic') {
     return (
       <PanelShell title="MODEL ADVISOR" sub="deterministic mode · advisor silent" className="border-dashed">
