@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import AdvisorPanel from './components/AdvisorPanel';
 import DebriefPanel from './components/DebriefPanel';
 import DecisionPanel from './components/DecisionPanel';
 import LogPanel from './components/LogPanel';
@@ -12,9 +13,13 @@ import PrioritizationPanel from './components/PrioritizationPanel';
 import SituationMap from './components/SituationMap';
 import WhatIfPanel from './components/WhatIfPanel';
 import { SCENARIOS } from './data/scenarios';
+import { ADVISOR_MODE_LABEL, getAdvisorExchange } from './lib/advisor';
 import { bootLog, fmtClock, initialState, reducer } from './lib/engine';
 import { cn } from '@/lib/utils';
+import type { AdvisorMode } from './types';
 import './App.css';
+
+const ADVISOR_MODES: AdvisorMode[] = ['live', 'cached', 'deterministic'];
 
 /* Glass-Box C2 — LAB-001 prototype.
    Play the scenario clock; when a recommendation is issued the clock holds
@@ -52,6 +57,9 @@ export default function App() {
   const decisionCount = Object.keys(scenario.decisions).length;
   const issuedConfidence = state.pending
     ? (state.records.find((r) => r.decisionId === state.pending!.id)?.confidenceShown ?? null)
+    : null;
+  const advisorExchange = state.pending
+    ? getAdvisorExchange(state.advisorMode, scenario, state.pending)
     : null;
 
   return (
@@ -119,6 +127,32 @@ export default function App() {
               : 'Instruments off: the answer and a number — the industry default.'}
           </p>
 
+          <RailGroupLabel>Model Advisor</RailGroupLabel>
+          <ToggleGroup
+            type="single"
+            value={state.advisorMode}
+            onValueChange={(v) => {
+              if (v === 'live' || v === 'cached' || v === 'deterministic')
+                dispatch({ type: 'SET_ADVISOR_MODE', advisorMode: v });
+            }}
+            variant="outline"
+            aria-label="Model Advisor mode"
+            className="grid w-full grid-cols-3"
+          >
+            {ADVISOR_MODES.map((m) => (
+              <ToggleGroupItem key={m} value={m} className="px-1 text-[11px]">
+                {ADVISOR_MODE_LABEL[m]}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <p className="px-2 pt-2 text-[11px] leading-snug text-muted-foreground">
+            {state.advisorMode === 'live'
+              ? 'Live Model requested. Until the verified live call is wired, the ladder serves disclosed cached output — never an unlabeled substitute.'
+              : state.advisorMode === 'cached'
+                ? 'Cached Advisor output (authored fallback, labeled on screen). The whole demo runs from this rung — no key, no network.'
+                : 'Advisor silent. The deterministic core runs alone — the v4 baseline.'}
+          </p>
+
           <RailGroupLabel>Session</RailGroupLabel>
           <dl className="space-y-1.5 px-2 font-mono text-[11px]">
             <div className="flex justify-between">
@@ -136,6 +170,10 @@ export default function App() {
             <div className="flex justify-between">
               <dt className="text-muted-foreground">MODE</dt>
               <dd className="font-semibold">{state.mode === 'glass' ? 'GLASS-BOX' : 'BLACK-BOX'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">ADVISOR</dt>
+              <dd className="font-semibold">{ADVISOR_MODE_LABEL[state.advisorMode].toUpperCase()}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-muted-foreground">LINK</dt>
@@ -194,6 +232,22 @@ export default function App() {
                     )}
                   >
                     {m === 'glass' ? 'Glass-Box' : 'Black-Box'}
+                  </button>
+                ))}
+              </div>
+              <div className="flex overflow-hidden rounded-md border" role="group" aria-label="Model Advisor mode">
+                {ADVISOR_MODES.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => dispatch({ type: 'SET_ADVISOR_MODE', advisorMode: m })}
+                    className={cn(
+                      'px-2.5 py-1.5 text-xs font-semibold',
+                      state.advisorMode === m
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-secondary text-muted-foreground',
+                    )}
+                  >
+                    {ADVISOR_MODE_LABEL[m]}
                   </button>
                 ))}
               </div>
@@ -280,17 +334,27 @@ export default function App() {
               linkDegraded={state.linkDegraded}
               labels={scenario.mapLabels}
             />
-            <DecisionPanel
-              key={state.pending ? state.pending.id : 'idle'}
-              decision={state.pending}
-              mode={state.mode}
-              clock={state.clock}
-              feedWeights={state.weights.feeds}
-              issuedConfidence={issuedConfidence}
-              onResolve={(action, reason, latencySec) =>
-                dispatch({ type: 'RESOLVE', action, reason, latencySec })
-              }
-            />
+            <div className="flex min-w-0 flex-col gap-4">
+              <DecisionPanel
+                key={state.pending ? state.pending.id : 'idle'}
+                decision={state.pending}
+                mode={state.mode}
+                clock={state.clock}
+                feedWeights={state.weights.feeds}
+                issuedConfidence={issuedConfidence}
+                onResolve={(action, reason, latencySec) =>
+                  dispatch({ type: 'RESOLVE', action, reason, latencySec })
+                }
+              />
+              <AdvisorPanel
+                key={state.pending ? `advisor-${state.pending.id}` : 'advisor-idle'}
+                decision={state.pending}
+                exchange={advisorExchange}
+                advisorMode={state.advisorMode}
+                coreConfidence={issuedConfidence}
+                clock={state.clock}
+              />
+            </div>
           </div>
 
           <PrioritizationPanel
@@ -317,7 +381,7 @@ export default function App() {
             decisions={scenario.decisions}
             inject={scenario.inject}
           />
-          <LogPanel log={state.log} />
+          <LogPanel log={state.log} modelLog={state.modelLog} />
 
           <footer className="px-4 pt-1 pb-2 text-center text-xs text-muted-foreground">
             Newton &amp; Carter Labs · LAB-001 Glass-Box Decision Support · Prototype — all data

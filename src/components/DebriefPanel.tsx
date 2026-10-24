@@ -20,6 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { PanelShell, SectionLabel } from './Panel';
+import { advisorAgreement } from '../lib/advisor';
 import { systemReliability } from '../lib/recommender';
 import { cn } from '@/lib/utils';
 import type { DecisionDef, DecisionRecord, InjectReport, Mode } from '../types';
@@ -64,6 +65,11 @@ export default function DebriefPanel({
 
   const trap = records.find((r) => r.decisionId === inject.decisionId);
   const caughtInject = trap?.action === inject.correctAction;
+
+  // Second score (hackathon build): how often the Model Advisor
+  // concurred with the core. Reported ALONGSIDE appropriate reliance,
+  // never instead of it — two voices disagreeing is data, not a verdict.
+  const agreement = advisorAgreement(records);
 
   const latencies = resolved.map((r) => r.latencySec ?? 0);
   const avgLatency =
@@ -151,6 +157,31 @@ export default function DebriefPanel({
         )}
       </div>
 
+      {agreement.total > 0 && (
+        <div className="mt-4">
+          <SectionLabel className="mb-2.5">Model Advisor agreement</SectionLabel>
+          <div className="grid grid-cols-[190px_1fr_48px] items-center gap-2.5 text-[13px]">
+            <span>Advisor concurred with core</span>
+            <Progress
+              value={agreement.rate ?? 0}
+              className="h-2.5"
+              indicatorClassName="bg-amber-400"
+              aria-label={`Model Advisor agreement ${agreement.rate ?? 0} percent`}
+            />
+            <strong className="text-right font-mono tabular-nums">{agreement.rate}%</strong>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The Advisor concurred on {agreement.agreed} of {agreement.total} decision points
+            {agreement.total - agreement.agreed > 0
+              ? ` and disagreed on ${agreement.total - agreement.agreed} — each disagreement was flagged live, with both positions shown.`
+              : '.'}{' '}
+            This rate sits alongside the reliance score above; it never replaces it. Agreement is
+            not correctness: at the bad-inject decision the Advisor concurred with a wrong
+            recommendation, and the catch still came from provenance.
+          </p>
+        </div>
+      )}
+
       {ended && (
         <div className="mt-4">
           <Dialog>
@@ -181,6 +212,9 @@ export default function DebriefPanel({
                           Your action
                         </TableHead>
                         <TableHead className="font-mono text-[11px] tracking-wider uppercase">
+                          Advisor
+                        </TableHead>
+                        <TableHead className="font-mono text-[11px] tracking-wider uppercase">
                           Result
                         </TableHead>
                         <TableHead className="font-mono text-[11px] tracking-wider uppercase">
@@ -200,6 +234,13 @@ export default function DebriefPanel({
                           <TableCell className="whitespace-normal">
                             {r.action ?? '—'}
                             {r.reason ? ` (${r.reason})` : ''}
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {r.advisorVerdict === null
+                              ? '— (deterministic)'
+                              : r.advisorAgrees
+                                ? `concurred`
+                                : 'DISAGREED — flagged'}
                           </TableCell>
                           <TableCell>
                             {r.correct === null ? (
