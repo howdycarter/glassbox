@@ -60,6 +60,8 @@ as the core's surface. Three design rules govern the integration:
 3. **The model is glass-boxed too.** Every Advisor exchange — the full
    prompt (built from scenario state, inspectable in `src/lib/advisor.ts`)
    and the raw response — is written to a forensic model log in the app.
+   The live client (`src/lib/advisor-live.ts`) records measured latency
+   and, on any degradation from Live to Cached, the failure itself.
    Meta AI usage is evidenced in the artifact, not asserted in this text.
 
 ## What was built for this hackathon vs. what pre-existed
@@ -73,26 +75,38 @@ Honest split, because the distinction matters:
   this prototype; it is presented as a prototype, not a fielded system, and
   no client or employer work is included in it.
 - **Built for this hackathon:** the entire Model Advisor layer — the Advisor
-  service and Meta Model API integration shape, the Advisor panel with
+  service, the Meta Model API client (implemented against the documented
+  API shape; each shape assumption is flagged UNVERIFIED in the code and
+  is verified against the real API in the build-window spike, before
+  submission), the Advisor panel with
   verdict/reasoning/confidence-read/provenance rendering, contradiction
   flagging, the forensic model log, the debrief's Advisor agreement score
   and ground-truth Advisor column, the Live/Cached/Deterministic mode
   toggle with the designed failure ladder, the authored cached outputs for
-  all 10 decision points, and 30 new verification assertions covering the
-  layer (117 total, `npm run verify`).
+  all 10 decision points, and 47 new verification assertions covering the
+  layer (134 total, `npm run verify`) — including the live ladder
+  exercised end-to-end with mocked transports (zero network).
 
 ## Live vs. cached — stated plainly
 
 The demo runs today on **authored cached Advisor outputs** for all 10
 decision points, labeled on screen as cached wherever they appear. The live
-path (Muse Spark through the Meta Model API) is integrated behind the same
-panel, prompt builder, and log; it activates with the entrant's Meta Model
-API key `[status at submission: live verified / cached — fill in at submit
-time]`. No cached output is ever presented as a live model response — the
-build enforces this in code (cached exchanges are labeled `source: cached`
-end to end, and a verification assertion guards the label). If the live call
-is unavailable at demo time, the failure ladder degrades Live → Cached →
-Deterministic (core-only); the submission works at every rung.
+path (Muse Spark through the Meta Model API) is implemented behind the same
+panel, prompt builder, and log — a client with a strict parser for the
+labeled output contract, exercised in the verification harness with mocked
+transports — and it activates with the entrant's Meta Model API key
+`[status at submission: live verified / cached — fill in at submit time]`.
+What has **not** happened yet, stated plainly: no keyed call has been made
+from this codebase, and the API shape the client targets (base URL,
+endpoint, model id) is documented but UNVERIFIED until the build-window
+spike checks it against the real API — the assumptions are flagged in
+`src/lib/advisor-live.ts`, each isolated to a single constant or function.
+No cached output is ever presented as a live model response — the build
+enforces this in code (an exchange is labeled `source: live` only when a
+real keyed response was received and parsed in that call, and verification
+assertions guard both labels). If the live call is unavailable at demo
+time, the failure ladder degrades Live → Cached → Deterministic
+(core-only); the submission works at every rung.
 
 ## Why this matters beyond the demo
 
