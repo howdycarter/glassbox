@@ -10,8 +10,11 @@ catches the trap the model also misses → Black-Box flip → debrief close.
 
 ## Pre-flight (before recording)
 
-1. `npm run dev` (or `npm run preview` on the production build). Browser at
-   1440×900 or larger, zoom 100%. Close other tabs.
+1. `npm run preview` on the production build (preferred for recording —
+   no dev overlay) or `npm run dev`. Browser at 1440×900 or larger,
+   zoom 100%. Close other tabs. If the Model Advisor panel falls below
+   the fold at a held decision, drop zoom to 90% rather than scrolling
+   mid-beat — beats 3 and 4 live in that panel.
 2. Console state, left rail:
    - Vignette: **POISONED PICTURE** (default on load).
    - Display mode: **Glass-Box**.
@@ -48,11 +51,11 @@ directly below it.]
 
 > **"The deterministic core recommends — and now a second voice reads the same
 > picture: Muse Spark, through the Meta Model API. It concurs here: U-101
-> hostile, and its confidence read lands within five points of the core's 80%.
-> Its citations are the same provenance records the operator sees — nothing
-> reaches the model that isn't on the glass."**
+> hostile, confidence read 'High — and earned.' Its citations are the same
+> provenance records the operator sees — nothing reaches the model that
+> isn't on the glass."**
 
-[Accept DP-1. Let DP-2 (T+12) issue; the Advisor concurs again. Accept.]
+[Accept DP-1. Let DP-2 (T+13) issue; the Advisor concurs again. Accept.]
 
 > "DP-2: concur again. Two agreements — and agreement is about to stop meaning
 > *correct*."
@@ -69,26 +72,34 @@ directly below it.]
    > **"The model agrees. It followed the same standing precedence rule the
    > core did. If your safety case is 'the AI will catch it,' you just lost."**
 3. Provenance strip on the recommendation: the relay feed is flagged
-   **INTEGRITY ANOMALY**; the contradicting UAS feed is flagged **STALE**.
+   **INTEGRITY ANOMALY** — its header claims a 1-minute-old update; the
+   strip shows the message is actually **14 minutes old**. The three
+   feeds contradicting it (UAS-1 EO/IR, G-3 radar, B/1-7's own voice
+   report) are all clean.
 
 > **"What catches it is not a smarter model. It's provenance the operator can
-> read: one feed fails integrity, the contradicting feed is stale, and the
-> standing rule says blue-force position cannot override a sensor track. The
-> model didn't save you. The glass box did."**
+> read: one feed fails integrity and lies about its age, three independent
+> feeds contradict it — and a standing precedence rule let that one
+> compromised feed outrank them all. The model didn't save you. The glass
+> box did."**
 
 [Click **Override**, select the provenance reason, submit. The picture keeps
 U-101 hostile; the log records the override.]
 
 ### Beat 4 — The contradiction flag: DP-4 (1:35–1:55)
 
-[At **DP-4 (T+22)** the recommendation issues at 57%. The Advisor panel shows
-the red **Contradiction flag** banner: Advisor LEAN — ALTERNATE COA vs the
-core's recommendation.]
+[At **DP-4 (T+22)** the recommendation issues at 57%: the core says **HOLD**.
+The Advisor panel shows the red **Contradiction flag** banner: the Advisor
+leans the other way — **"Lean ACT — retask UAS-1 toward H-201 on the
+last-known-good picture."**]
 
-> **"Here the advisor dissents — it leans to holding position. The flag doesn't
-> pick a winner; it forces the disagreement onto the glass, with the core's
-> arithmetic on one side and the model's reasoning on the other. This time the
-> core is right: link margin and the medical timeline carry it."**
+> **"Here the advisor dissents — it leans to act: retask the UAS toward H-201
+> on the stale picture, while the core says hold. The flag doesn't pick a
+> winner; it forces the disagreement onto the glass, with the core's
+> arithmetic on one side and the model's reasoning on the other. This time
+> the core is right: the link restores at T+25, nothing in the picture is
+> time-critical inside the cycle, and acting flies the only eye toward a
+> confirmed air-defense system on seven-minute-old data."**
 
 [Accept DP-4. Advance to DP-5 (T+27); Advisor concurs. Accept.]
 
@@ -106,17 +117,21 @@ core's recommendation.]
 > the core 80% of the time — including at the one decision where the core was
 > wrong. Agreement is not correctness. Reliance is what we score."**
 
-[Open **View ground truth**: the Advisor column shows *concurred* at DP-3 and
-*DISAGREED — flagged* at DP-4.]
+[Open the **"Ground truth, decision by decision"** dialog: the Advisor
+column shows *concurred* at DP-3 and *DISAGREED — flagged* at DP-4.]
 
 ### Beat 6 — The Black-Box flip (2:25–2:50)
 
 [Click **Reset**; rail → Display mode **Black-Box**; **Play**; advance to DP-3
-(T+16). The surface collapses to the recommendation and one number: 71%. No
-reasoning, no provenance, no Advisor panel content to audit.]
+(T+16), resolving DP-1 and DP-2 as they hold. The surface collapses to the
+recommendation and one number: 71%. No reasoning, no provenance — and the
+Model Advisor panel shows the instruments-off mute: the second voice is off
+the glass too. Wall-clock note: the run to T+16 is ~15 s of clock travel
+(16 ticks at 0.9 s) plus two held decisions — talk over the travel, or
+pre-record this run and cut to DP-3.]
 
 > **"Same scenario, same trap, same 71%. In black-box mode there is nothing to
-> catch it with — no provenance to read, no second voice on the record. This
+> catch it with — no provenance to read, no second voice on the glass. This
 > is the product most operators actually get. The difference between these
 > two screens is the whole company."**
 
@@ -126,9 +141,12 @@ names the consequence.]
 
 ### Beat 7 — The receipts: forensic model log (2:50–3:00)
 
-[Back to Glass-Box mode; open the logs panel → **Model log** tab. Show one
-exchange expanded: the full prompt built from scenario state, the raw labeled
-response.]
+[Back to Glass-Box mode; open the logs panel → **Model log** tab. The log
+now holds the Black-Box run's exchanges (the beat-6 Reset cleared the first
+run's). Open the **DP-3** exchange: the full prompt built from scenario
+state, the raw labeled response. The point lands itself — the exchange was
+recorded even in Black-Box mode; it just wasn't on the glass when the
+decision was made.]
 
 > **"Every model exchange — prompt and raw response — is in the forensic log.
 > Meta AI usage you can audit, not a claim you have to take on faith. That's
