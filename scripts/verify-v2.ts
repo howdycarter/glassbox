@@ -23,7 +23,11 @@
    K. Full DARK STRAIT runs: correct path 5/5, accept-everything 4/5
       with the trap consequence persisting, deterministic replay, and
       SET_SCENARIO / RESET semantics.
-   L. SSR smoke for the v3 surfaces (picker, scenario-2 trap, debrief). */
+   L. SSR smoke for the v3 surfaces (picker, scenario-2 trap, debrief).
+   M. Model Advisor (hackathon build): cache completeness for all 10
+      decision points, honesty labels (cached is never labeled live),
+      agreement scoring alongside — never instead of — core scoring,
+      deterministic-mode silence, and SSR smoke for the new surfaces. */
 
 import React from 'react';
 import { renderToString } from 'react-dom/server';
@@ -40,10 +44,15 @@ import { DARK_STRAIT } from '../src/data/scenario2';
 import { DEFAULT_SCENARIO, SCENARIOS, SCENARIOS_BY_ID } from '../src/data/scenarios';
 import type { ScenarioDef } from '../src/types';
 import App from '../src/App';
+import AdvisorPanel from '../src/components/AdvisorPanel';
 import DecisionPanel from '../src/components/DecisionPanel';
 import DebriefPanel from '../src/components/DebriefPanel';
+import LogPanel from '../src/components/LogPanel';
 import PrioritizationPanel from '../src/components/PrioritizationPanel';
 import WhatIfPanel from '../src/components/WhatIfPanel';
+import { ADVISOR_CACHE } from '../src/data/advisor-cache';
+import { advisorAgreement, advisorKey, getAdvisorExchange } from '../src/lib/advisor';
+import type { AdvisorMode } from '../src/types';
 
 let passed = 0;
 let failed = 0;
@@ -492,6 +501,8 @@ const s2Debrief = renderToString(
         confidenceShown: 71,
         correct: false,
         latencySec: 3,
+        advisorVerdict: null,
+        advisorAgrees: null,
       },
     ],
     mode: 'glass' as const,
@@ -504,6 +515,166 @@ check(
   'debrief renders the scenario-declared missed-inject verdict',
   s2Debrief.includes('spoofed AIS identity was accepted'),
   s2Debrief.slice(0, 200),
+);
+
+console.log('M. Model Advisor (hackathon build) — cache completeness and honesty labels');
+for (const sc of SCENARIOS) {
+  for (const d of Object.values(sc.decisions)) {
+    const out = ADVISOR_CACHE[advisorKey(sc.id, d.id)];
+    check(
+      `cache covers ${sc.id}:${d.id}`,
+      !!out && out.citations.every((c) => d.inputs.some((i) => i.id === c)),
+      out ? 'citation does not resolve to a decision input' : 'missing cache entry',
+    );
+  }
+}
+check(
+  'Advisor concurs at both DP-3 traps (wrong by design — the catch is provenance, not a rescue)',
+  ADVISOR_CACHE['poisoned-picture:DP3'].agreesWithCore === true &&
+    ADVISOR_CACHE['dark-strait:DP3'].agreesWithCore === true,
+);
+check(
+  'Advisor leans alternate at both DP-4s (the scripted contradiction-flag beat)',
+  ADVISOR_CACHE['poisoned-picture:DP4'].agreesWithCore === false &&
+    ADVISOR_CACHE['dark-strait:DP4'].agreesWithCore === false,
+);
+check(
+  'no cache entry claims to be a live response (all labeled cached by construction)',
+  Object.values(ADVISOR_CACHE).every((o) => o.headline.length > 0 && o.reasoning.length > 0),
+);
+
+console.log('M2. Advisor in a live run (default Cached mode)');
+check(
+  'cached correct-path run still scores 5/5 — the Advisor never touches core scoring',
+  good.records.every((r) => r.correct === true) && good.records.length === 5,
+);
+check(
+  'every record on the cached run carries an Advisor verdict',
+  good.records.every((r) => r.advisorVerdict !== null),
+);
+const goodAgreement = advisorAgreement(good.records);
+check(
+  'Advisor agreement on the correct path = 4/5 (disagrees only at DP-4)',
+  goodAgreement.agreed === 4 && goodAgreement.total === 5 && goodAgreement.rate === 80,
+  `got ${goodAgreement.agreed}/${goodAgreement.total}`,
+);
+check(
+  'model log holds one exchange per decision point (5)',
+  good.modelLog.length === 5,
+  `got ${good.modelLog.length}`,
+);
+check(
+  'every model log exchange is labeled source=cached with a prompt and a labeled raw response',
+  good.modelLog.every(
+    (m) =>
+      m.source === 'cached' &&
+      m.prompt.includes(m.key.split(':')[1]) &&
+      m.response.includes('CACHED ADVISOR OUTPUT'),
+  ),
+);
+check(
+  'action log records the DP-4 contradiction flag',
+  good.log.some((e) => e.kind === 'advisor' && e.text.includes('CONTRADICTION FLAG')),
+);
+check(
+  'naive accept-everything run: DP-3 Advisor verdict concurs with the wrong core call',
+  naive.records.find((r) => r.decisionId === 'DP3')?.advisorAgrees === true &&
+    naive.records.find((r) => r.decisionId === 'DP3')?.correct === false,
+);
+
+console.log('M3. Deterministic mode and the Live label guard');
+function playRunAdvisor(
+  scenario: ScenarioDef,
+  advisorMode: AdvisorMode,
+  choose: (id: string) => 'accept' | 'override',
+): GameState {
+  let s = bootLog(initialState('glass', scenario, advisorMode));
+  for (let guard = 0; guard < 500 && !s.ended; guard++) {
+    if (s.pending) {
+      const action = choose(s.pending.id);
+      s = reducer(s, {
+        type: 'RESOLVE',
+        action,
+        reason: action === 'override' ? 'Provenance anomaly' : null,
+        latencySec: 3,
+      });
+    } else {
+      s = reducer(s, { type: 'TICK' });
+    }
+  }
+  return s;
+}
+const det = playRunAdvisor(DEFAULT_SCENARIO, 'deterministic', (id) => DECISIONS[id].correctAction);
+check('deterministic run still scores 5/5', det.records.every((r) => r.correct === true));
+check(
+  'deterministic run: no Advisor verdicts recorded and the model log stays empty',
+  det.records.every((r) => r.advisorVerdict === null) && det.modelLog.length === 0,
+);
+const liveExchange = getAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1);
+check(
+  'Live mode in this build never labels cached output as live (honesty guard)',
+  liveExchange !== null && liveExchange.source === 'cached',
+  `got source=${liveExchange?.source}`,
+);
+const modeBase = bootLog(initialState('glass'));
+const modeLogged = reducer(modeBase, { type: 'SET_ADVISOR_MODE', advisorMode: 'deterministic' });
+check(
+  'SET_ADVISOR_MODE writes exactly one forensic log entry',
+  modeLogged.log.length === modeBase.log.length + 1 &&
+    modeLogged.log[modeLogged.log.length - 1].text.includes('DETERMINISTIC'),
+);
+check(
+  'SET_ADVISOR_MODE to the current mode is a no-op',
+  reducer(modeBase, { type: 'SET_ADVISOR_MODE', advisorMode: 'cached' }) === modeBase,
+);
+
+console.log('M4. Advisor SSR smoke renders');
+const dp4Exchange = getAdvisorExchange('cached', DEFAULT_SCENARIO, DECISIONS.DP4);
+const advisorHtml = renderToString(
+  React.createElement(AdvisorPanel, {
+    decision: DECISIONS.DP4,
+    exchange: dp4Exchange,
+    advisorMode: 'cached' as const,
+    coreConfidence: 57,
+    clock: 22,
+  }),
+);
+check('AdvisorPanel renders the DP-4 contradiction flag', advisorHtml.includes('Contradiction flag'));
+check(
+  'AdvisorPanel discloses cached output on screen',
+  advisorHtml.includes('CACHED') && advisorHtml.includes('NOT A LIVE MODEL RESPONSE'),
+);
+const advisorSilentHtml = renderToString(
+  React.createElement(AdvisorPanel, {
+    decision: DECISIONS.DP1,
+    exchange: null,
+    advisorMode: 'deterministic' as const,
+    coreConfidence: 80,
+    clock: 6,
+  }),
+);
+check('AdvisorPanel explains itself in deterministic mode', advisorSilentHtml.includes('Advisor is muted'));
+const modelLogHtml = renderToString(
+  React.createElement(LogPanel, { log: good.log, modelLog: good.modelLog }),
+);
+check(
+  'LogPanel renders the model log tab with exchanges',
+  modelLogHtml.includes('Model log') && modelLogHtml.includes('poisoned-picture:DP1'),
+);
+const goodDebrief = renderToString(
+  React.createElement(DebriefPanel, {
+    records: good.records,
+    mode: 'glass' as const,
+    ended: true,
+    decisions: DECISIONS,
+    inject: DEFAULT_SCENARIO.inject,
+  }),
+);
+check(
+  'debrief renders the Advisor agreement score alongside reliance',
+  // SSR inserts <!-- --> between text nodes and expressions; strip them.
+  goodDebrief.replace(/<!-- -->/g, '').includes('Model Advisor agreement') &&
+    goodDebrief.replace(/<!-- -->/g, '').includes('concurred on 4 of 5'),
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);
