@@ -19,9 +19,12 @@ import { ADVISOR_CACHE } from '../data/advisor-cache';
  * Sources, after the failure ladder:
  * - Live: a Meta Model API response. Requires VITE_META_MODEL_API_KEY
  *   (created by the entrant at dev.meta.ai; never committed, never in
- *   this repo). The live call shape is verified in the build-window
- *   spike — until then, and on ANY live failure (no key, quota,
- *   network), the ladder degrades to the authored cache, disclosed.
+ *   this repo). The live client lives in src/lib/advisor-live.ts,
+ *   implemented against the documented API shape (assumptions flagged
+ *   UNVERIFIED there) — the build-window spike verifies it against the
+ *   real API with the entrant's key. On ANY live failure (no key,
+ *   quota, network, unparsable response), the ladder degrades to the
+ *   authored cache, disclosed.
  * - Cached: src/data/advisor-cache.ts — hand-authored outputs, labeled
  *   as cached everywhere they render. Never present one as live.
  * - Deterministic mode: no Advisor at all — the v4 core-only baseline.
@@ -29,8 +32,14 @@ import { ADVISOR_CACHE } from '../data/advisor-cache';
 
 /** Model the Advisor targets (Meta Model API). Config-level fact: the
     primary is Muse Spark; Muse Wonder is the documented alternate —
-    one config switch, same output contract. */
+    one config switch, same output contract. ADVISOR_MODEL is the
+    display name rendered in the UI and the forensic log; ADVISOR_MODEL_ID
+    is the identifier sent in the live request body.
+    UNVERIFIED: the exact API model-id string is secondary-sourced
+    (event/docs material, Oct 2026) and is confirmed at the Day-1 spike —
+    it is a one-line config change if the portal disagrees. */
 export const ADVISOR_MODEL = 'Muse Spark (Meta Model API)';
+export const ADVISOR_MODEL_ID = 'muse-spark';
 
 export const ADVISOR_MODE_LABEL: Record<AdvisorMode, string> = {
   live: 'Live Model',
@@ -45,14 +54,16 @@ export function liveKeyConfigured(): boolean {
 }
 
 /**
- * Resolve the effective source for a mode. Deterministic → null (the
- * Advisor is silent). Every other mode serves the cache in THIS build:
- * the verified live call lands in the build-window spike, and until a
- * real API response exists, no output may be labeled 'live' — serving
+ * Resolve the effective source for a mode on the SYNCHRONOUS path (the
+ * engine consumes this at decision-issue time, so in-flight UI state
+ * never waits on the network). Deterministic → null (the Advisor is
+ * silent). Every other mode serves the cache here: until a real,
+ * keyed API response exists, no output may be labeled 'live' — serving
  * the cache under a live label is exactly the failure the honesty
- * rules exist to prevent. When the spike wires the real call, this
- * function returns 'live' for Live mode with a key configured, and
- * the ladder keeps degrading to 'cached' on any live failure.
+ * rules exist to prevent. The asynchronous ladder — live attempt
+ * first, cache on any failure — is resolveAdvisorExchange in
+ * src/lib/advisor-live.ts; the Day-1 spike swaps the engine's
+ * decision-issue call site to it once the API shape is verified.
  */
 export function effectiveSource(mode: AdvisorMode): AdvisorSource | null {
   if (mode === 'deterministic') return null;
@@ -93,13 +104,28 @@ export function buildAdvisorPrompt(scenario: ScenarioDef, decision: DecisionDef)
     decision.ruleApplied
       ? `Standing rule applied by the core: ${decision.ruleApplied.label} (weight ${decision.ruleApplied.weight}).`
       : '',
-    `Respond with exactly: a verdict (concur / lean-alternate / disagree), a one-line headline, reasoning bullets, a confidence read, and provenance citations by input id.`,
+    /* The response contract — the exact labeled format the live parser
+       in src/lib/advisor-live.ts consumes. The cached demo logs this
+       same prompt, so the contract the spike exercises is the contract
+       already on the record. */
+    [
+      'Respond in exactly this labeled format, with no preamble:',
+      'Verdict: <concur | lean-alternate | disagree>',
+      'Headline: <one line>',
+      'Reasoning:',
+      '- <one bullet per line>',
+      'Confidence read: <one line>',
+      'Citations: <comma-separated input ids from the list above>',
+      'Agrees with core: <yes | no>',
+    ].join('\n'),
   ]
     .filter((line) => line !== '')
     .join('\n');
 }
 
-/** Serialize an Advisor output the way the forensic log stores a raw response. */
+/** Serialize an Advisor output the way the forensic log stores a raw
+    response — in the same labeled contract buildAdvisorPrompt requests
+    from the live model, so cached and live raw responses read alike. */
 export function serializeAdvisorResponse(output: AdvisorOutput, source: AdvisorSource): string {
   const header =
     source === 'cached'
@@ -107,10 +133,12 @@ export function serializeAdvisorResponse(output: AdvisorOutput, source: AdvisorS
       : '[LIVE MODEL RESPONSE]';
   return [
     header,
-    `Verdict: ${output.verdict} — ${output.headline}`,
-    ...output.reasoning.map((r) => `• ${r}`),
+    `Verdict: ${output.verdict}`,
+    `Headline: ${output.headline}`,
+    'Reasoning:',
+    ...output.reasoning.map((r) => `- ${r}`),
     `Confidence read: ${output.confidenceRead}`,
-    `Provenance citations: ${output.citations.join(', ')}`,
+    `Citations: ${output.citations.join(', ')}`,
     `Agrees with core: ${output.agreesWithCore ? 'yes' : 'no'}`,
   ].join('\n');
 }

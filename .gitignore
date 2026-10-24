@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets — the Meta Model API key lives in .env.local only
+.env
+.env.*
+!.env.example
