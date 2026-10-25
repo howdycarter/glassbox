@@ -59,6 +59,14 @@ import {
  * resolveAdvisorExchange and record resolution.rawResponse /
  * resolution.latencyMs in the model log entry, plus resolution.liveError
  * as an action-log line when a live attempt degrades.
+ *
+ * SPIKE SUPPORT: buildLiveRequest / fetchLiveAdvisorOutput /
+ * resolveAdvisorExchange accept optional baseUrl / modelId overrides
+ * so the Day-1 smoke check (scripts/smoke-live.ts, `npm run
+ * smoke:live`) can probe alternate A1/A4 shapes from environment
+ * variables without editing this file. Defaults are exactly the
+ * documented constants above; overrides change where the call goes,
+ * never how its result is labeled — the honesty rules are untouched.
  */
 
 /** A1 — UNVERIFIED base URL for the Meta Model API. */
@@ -117,17 +125,23 @@ export function liveApiKey(): string | null {
   return typeof key === 'string' && key.trim().length > 0 ? key.trim() : null;
 }
 
-/** Build the request for a decision point (A1–A4 live here). */
-export function buildLiveRequest(prompt: string, apiKey: string): LiveRequest {
+/** Build the request for a decision point (A1–A4 live here).
+    Optional overrides exist for the Day-1 spike only (see header);
+    omitted, they are exactly the documented constants. */
+export function buildLiveRequest(
+  prompt: string,
+  apiKey: string,
+  overrides: { baseUrl?: string; modelId?: string } = {},
+): LiveRequest {
   return {
-    url: `${META_MODEL_API_BASE_URL}/chat/completions`,
+    url: `${overrides.baseUrl ?? META_MODEL_API_BASE_URL}/chat/completions`,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
     body: {
-      model: ADVISOR_MODEL_ID,
+      model: overrides.modelId ?? ADVISOR_MODEL_ID,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     },
@@ -268,11 +282,18 @@ export async function fetchLiveAdvisorOutput(opts: {
   apiKey: string;
   transport?: AdvisorTransport;
   timeoutMs?: number;
+  /** Day-1 spike probes (A1/A4 alternates); defaults are the
+      documented constants. */
+  baseUrl?: string;
+  modelId?: string;
 }): Promise<LiveSuccess> {
   const transport = opts.transport ?? fetchTransport;
   const timeoutMs = opts.timeoutMs ?? LIVE_CALL_TIMEOUT_MS;
   const prompt = buildAdvisorPrompt(opts.scenario, opts.decision);
-  const req = buildLiveRequest(prompt, opts.apiKey);
+  const req = buildLiveRequest(prompt, opts.apiKey, {
+    baseUrl: opts.baseUrl,
+    modelId: opts.modelId,
+  });
   const controller = new AbortController();
   // The timeout races the transport rather than relying on the
   // transport to honor the abort signal — a transport that ignores
@@ -349,7 +370,13 @@ export async function resolveAdvisorExchange(
   mode: AdvisorMode,
   scenario: ScenarioDef,
   decision: DecisionDef,
-  opts: { apiKey?: string | null; transport?: AdvisorTransport; timeoutMs?: number } = {},
+  opts: {
+    apiKey?: string | null;
+    transport?: AdvisorTransport;
+    timeoutMs?: number;
+    baseUrl?: string;
+    modelId?: string;
+  } = {},
 ): Promise<AdvisorResolution | null> {
   if (mode === 'deterministic') return null;
   if (mode === 'cached') return cachedResolution(scenario, decision, null);
@@ -365,6 +392,8 @@ export async function resolveAdvisorExchange(
       apiKey,
       transport: opts.transport,
       timeoutMs: opts.timeoutMs,
+      baseUrl: opts.baseUrl,
+      modelId: opts.modelId,
     });
     const exchange: AdvisorExchange = {
       key: advisorKey(scenario.id, decision.id),
