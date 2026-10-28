@@ -13,6 +13,13 @@ listing: Nov 4, 9:00 PM ET — re-confirm on the portal Monday Oct 26).
 > Official Rules are accepted and the portal fields are confirmed. Nothing in
 > this draft claims company past performance — Glass-Box is Newton & Carter's
 > own R&D prototype line, and it is described as exactly that.
+>
+> **Package status — Oct 28, 2026:** the hackathon build is now the public
+> repo's `main` (fast-forwarded to `80e3eca`). Verified on this date:
+> `npm run verify` **134 passed, 0 failed**; production build green
+> (`npm run build`). Remaining before filing: demo video recorded against
+> this build (see Links), Official Rules acceptance (entrant's step), and
+> the portal form itself.
 
 ## The problem
 
@@ -94,8 +101,12 @@ decision points, labeled on screen as cached wherever they appear. The live
 path (Muse Spark through the Meta Model API) is implemented behind the same
 panel, prompt builder, and log — a client with a strict parser for the
 labeled output contract, exercised in the verification harness with mocked
-transports — and it activates with the entrant's Meta Model API key
-`[status at submission: live verified / cached — fill in at submit time]`.
+transports — and it activates with the entrant's Meta Model API key.
+**Status as of Oct 28, 2026: CACHED.** No keyed live call has been made yet;
+the spike that verifies the live path against the real API is scripted
+(`npm run smoke:live`, one command once the key is in the shell env) and is
+run before submission if the key is exercised in the window — this line is
+updated to LIVE VERIFIED only if that run exits 0.
 What has **not** happened yet, stated plainly: no keyed call has been made
 from this codebase, and the API shape the client targets (base URL,
 endpoint, model id) is documented but UNVERIFIED until the build-window
@@ -118,8 +129,13 @@ that measurement layer.
 
 ## Links & fields (fill at submission)
 
-- Repository: https://github.com/howdycarter/glassbox
-- Demo video: `[URL after recording — record at the Nov 2 freeze build, per DEMO_SCRIPT.md]`
+- Repository: https://github.com/howdycarter/glassbox (`main` = the hackathon
+  build, `80e3eca` + this document; verify 134/134, production build green)
+- Demo video: `[URL after recording — record at the Nov 2 freeze build, per
+  DEMO_SCRIPT.md and RECORDING_CHECKLIST.md. Note: the 57-second assembled
+  video from Oct 21 predates the Model Advisor layer and does not show it;
+  it is a fallback for the core demo only, not the entry video.]`
 - Live demo: `[if deployed — optional; the repo runs locally with npm install && npm run dev]`
 - Team: Newton & Carter LLC — Chris Carter, founder `[+ any team fields the portal requires]`
-- Track confirmation: `[Startup — confirm exact org-size field on the portal]`
+- Track confirmation: Startup (per the verified requirements baseline;
+  confirm the exact org-size field wording on the portal at filing)
