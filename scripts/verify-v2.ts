@@ -65,10 +65,12 @@ import {
   advisorAgreement,
   advisorKey,
   getAdvisorExchange,
+  serializeAdvisorResponse,
 } from '../src/lib/advisor';
 import {
   parseAdvisorResponse,
   resolveAdvisorExchange,
+  type AdvisorResolution,
   type AdvisorTransport,
   type LiveRequest,
 } from '../src/lib/advisor-live';
@@ -632,7 +634,7 @@ check(
 );
 const liveExchange = getAdvisorExchange('live', DEFAULT_SCENARIO, DECISIONS.DP1);
 check(
-  'Live mode in this build never labels cached output as live (honesty guard)',
+  'Synchronous path never labels cached output as live, even in Live mode (honesty guard, sync path scope)',
   liveExchange !== null && liveExchange.source === 'cached',
   `got source=${liveExchange?.source}`,
 );
@@ -717,7 +719,7 @@ check(
     goodDebrief.replace(/<!-- -->/g, '').includes('concurred on 4 of 5'),
 );
 
-console.log('M5. Live ladder with mocked transports (zero network; API shape UNVERIFIED)');
+console.log('M5. Live ladder with mocked transports (zero network; API shape verified against the real API Nov 3, 2026)');
 const LIVE_REPLY = [
   'Verdict: concur',
   'Headline: Concur — designate HOSTILE.',
@@ -746,7 +748,7 @@ async function sectionM5() {
     }),
   });
   check(
-    'live request targets the documented endpoint with bearer auth (shape locked, API UNVERIFIED)',
+    'live request targets the documented endpoint with bearer auth (shape locked; verified against the real API Nov 3, 2026)',
     captured !== null &&
       captured.url === 'https://api.meta.ai/v1/chat/completions' &&
       captured.headers.Authorization === 'Bearer test-key-not-real',
@@ -896,6 +898,105 @@ async function sectionM5() {
     ) === null,
   );
 }
+
+console.log('M6. ADVISOR_RESOLVED wiring (reducer-level, fabricated resolutions — no network)');
+function playToPending(
+  scenario: ScenarioDef,
+  advisorMode: AdvisorMode,
+  decisionId: string,
+): GameState {
+  let s = bootLog(initialState('glass', scenario, advisorMode));
+  for (let guard = 0; guard < 500; guard++) {
+    if (s.pending) {
+      if (s.pending.id === decisionId) return s;
+      const def = s.scenario.decisions[s.pending.id];
+      s = reducer(s, {
+        type: 'RESOLVE',
+        action: def.correctAction,
+        reason: null,
+        latencySec: 3,
+      });
+    } else if (s.ended) {
+      break;
+    } else {
+      s = reducer(s, { type: 'TICK' });
+    }
+  }
+  throw new Error(`decision ${decisionId} never pended`);
+}
+const liveBase = playToPending(DEFAULT_SCENARIO, 'live', 'DP1');
+const fabricatedLive: AdvisorResolution = {
+  exchange: {
+    key: advisorKey(DEFAULT_SCENARIO.id, 'DP1'),
+    scenarioId: DEFAULT_SCENARIO.id,
+    decisionId: 'DP1',
+    source: 'live',
+    model: 'muse-wonder-1.0',
+    output: {
+      verdict: 'concur',
+      headline: 'Fabricated live headline for the wiring check',
+      reasoning: ['Fabricated reasoning line.'],
+      confidenceRead: 'Fabricated confidence read.',
+      citations: [DECISIONS.DP1.inputs[0].id],
+      agreesWithCore: true,
+    },
+  },
+  rawResponse: 'Verdict: concur\nHeadline: Fabricated live headline for the wiring check',
+  latencyMs: 1234,
+  liveError: null,
+};
+const wiredLive = reducer(liveBase, {
+  type: 'ADVISOR_RESOLVED',
+  decisionId: 'DP1',
+  resolution: fabricatedLive,
+});
+const wiredEntry = wiredLive.modelLog.find((m) => m.key === fabricatedLive.exchange.key);
+check(
+  'ADVISOR_RESOLVED (live) patches record verdict/agrees and the model log: source live, verbatim raw response, numeric latency',
+  wiredLive.records.find((r) => r.decisionId === 'DP1')?.advisorVerdict === 'concur' &&
+    wiredLive.records.find((r) => r.decisionId === 'DP1')?.advisorAgrees === true &&
+    wiredEntry?.source === 'live' &&
+    wiredEntry?.response === fabricatedLive.rawResponse &&
+    wiredEntry?.latencyMs === 1234 &&
+    wiredLive.advisorExchange?.source === 'live',
+);
+const cachedExchangeDP1 = getAdvisorExchange('cached', DEFAULT_SCENARIO, DECISIONS.DP1)!;
+const fabricatedDegraded: AdvisorResolution = {
+  exchange: cachedExchangeDP1,
+  rawResponse: serializeAdvisorResponse(cachedExchangeDP1.output, 'cached'),
+  latencyMs: null,
+  liveError: 'http: live call returned HTTP 402',
+};
+const wiredDegraded = reducer(liveBase, {
+  type: 'ADVISOR_RESOLVED',
+  decisionId: 'DP1',
+  resolution: fabricatedDegraded,
+});
+check(
+  'ADVISOR_RESOLVED (degraded) keeps source cached and appends the liveError action-log line',
+  wiredDegraded.modelLog.find((m) => m.key === fabricatedDegraded.exchange.key)?.source ===
+    'cached' &&
+    wiredDegraded.log.some(
+      (e) => e.kind === 'advisor' && e.text.includes('Live Advisor attempt on DP1 degraded'),
+    ),
+);
+check(
+  'ADVISOR_RESOLVED for an unknown decision id is a no-op',
+  reducer(liveBase, {
+    type: 'ADVISOR_RESOLVED',
+    decisionId: 'DP9',
+    resolution: fabricatedLive,
+  }) === liveBase,
+);
+const modeSwitched = reducer(liveBase, { type: 'SET_ADVISOR_MODE', advisorMode: 'cached' });
+check(
+  'ADVISOR_RESOLVED arriving after the mode was switched away from live is ignored',
+  reducer(modeSwitched, {
+    type: 'ADVISOR_RESOLVED',
+    decisionId: 'DP1',
+    resolution: fabricatedLive,
+  }) === modeSwitched,
+);
 
 sectionM5()
   .then(() => {

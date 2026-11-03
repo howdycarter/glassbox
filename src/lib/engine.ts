@@ -1,4 +1,5 @@
 import type {
+  AdvisorExchange,
   AdvisorMode,
   DecisionDef,
   DecisionRecord,
@@ -14,6 +15,7 @@ import { DEFAULT_SCENARIO, SCENARIOS_BY_ID } from '../data/scenarios';
 import { computeConfidence } from './recommender';
 import { DEFAULT_WEIGHTS, describeWeightChanges, weightsEqual } from './prioritization';
 import { buildAdvisorPrompt, getAdvisorExchange, serializeAdvisorResponse } from './advisor';
+import type { AdvisorResolution } from './advisor-live';
 
 /* Scenario engine: a deterministic reducer. Events fire off the scenario
    clock; decision events pause the clock until the operator acts. Every
@@ -52,6 +54,11 @@ export interface GameState {
       and raw response, labeled by source. Run state; cleared on Reset. */
   modelLog: ModelLogEntry[];
   modelLogSeq: number;
+  /** The Advisor exchange for the currently pending decision, as
+      resolved so far: the synchronous (cached-labeled) exchange at
+      issue time, replaced in place by ADVISOR_RESOLVED when the
+      asynchronous live ladder settles. Null when no decision pends. */
+  advisorExchange: AdvisorExchange | null;
 }
 
 export function initialState(
@@ -81,6 +88,7 @@ export function initialState(
     advisorMode,
     modelLog: [],
     modelLogSeq: 0,
+    advisorExchange: null,
   };
 }
 
@@ -119,6 +127,7 @@ export type Action =
   | { type: 'SET_ADVISOR_MODE'; advisorMode: AdvisorMode }
   | { type: 'SET_WEIGHTS_LIVE'; weights: PriorityWeights }
   | { type: 'COMMIT_WEIGHTS' }
+  | { type: 'ADVISOR_RESOLVED'; decisionId: string; resolution: AdvisorResolution }
   | { type: 'RESOLVE'; action: 'accept' | 'override'; reason: string | null; latencySec: number };
 
 export function reducer(state: GameState, action: Action): GameState {
@@ -275,6 +284,7 @@ export function reducer(state: GameState, action: Action): GameState {
           if (exchange) {
             s = {
               ...s,
+              advisorExchange: exchange,
               records: s.records.map((r) =>
                 r.decisionId === def.id
                   ? {
@@ -319,6 +329,78 @@ export function reducer(state: GameState, action: Action): GameState {
       return s;
     }
 
+    case 'ADVISOR_RESOLVED': {
+      // The asynchronous live ladder settled for a decision issued
+      // earlier. Guards: Live mode must still be in effect, and the
+      // decision must actually have been issued (record + model-log
+      // entry on file). Anything else is stale and ignored.
+      const { decisionId, resolution } = action;
+      if (state.advisorMode !== 'live') return state;
+      const issuedRecord = state.records.find((r) => r.decisionId === decisionId);
+      const issuedEntry = state.modelLog.find((m) => m.key === resolution.exchange.key);
+      if (!issuedRecord || !issuedEntry || resolution.exchange.decisionId !== decisionId) {
+        return state;
+      }
+      const alreadyApplied =
+        issuedEntry.source === resolution.exchange.source &&
+        issuedEntry.response === resolution.rawResponse &&
+        issuedEntry.latencyMs === resolution.latencyMs;
+      if (alreadyApplied && resolution.liveError === null) return state;
+      if (
+        alreadyApplied &&
+        resolution.liveError !== null &&
+        state.log.some((e) => e.text.includes(`Live Advisor attempt on ${decisionId} degraded`))
+      ) {
+        return state;
+      }
+      let s: GameState = {
+        ...state,
+        records: state.records.map((r) =>
+          r.decisionId === decisionId
+            ? {
+                ...r,
+                advisorVerdict: resolution.exchange.output.verdict,
+                advisorAgrees: resolution.exchange.output.agreesWithCore,
+              }
+            : r,
+        ),
+        modelLog: state.modelLog.map((m) =>
+          m.key === resolution.exchange.key
+            ? {
+                ...m,
+                source: resolution.exchange.source,
+                model: resolution.exchange.model,
+                response: resolution.rawResponse,
+                latencyMs: resolution.latencyMs,
+              }
+            : m,
+        ),
+        advisorExchange:
+          state.pending?.id === decisionId ? resolution.exchange : state.advisorExchange,
+      };
+      if (resolution.exchange.source === 'live') {
+        s = pushLog(
+          s,
+          'advisor',
+          s.clock,
+          `Model Advisor (live) on ${decisionId}: ${resolution.exchange.output.verdict.toUpperCase()} — ${resolution.exchange.output.headline}` +
+            (resolution.latencyMs !== null ? ` Live call latency ${resolution.latencyMs} ms.` : '') +
+            (resolution.exchange.output.agreesWithCore
+              ? ' Concurs with the core recommendation.'
+              : ' CONTRADICTION FLAG: the Advisor disagrees with the core recommendation — both positions stand for the operator.'),
+        );
+      }
+      if (resolution.liveError !== null) {
+        s = pushLog(
+          s,
+          'advisor',
+          s.clock,
+          `Live Advisor attempt on ${decisionId} degraded to disclosed cache — ${resolution.liveError}`,
+        );
+      }
+      return s;
+    }
+
     case 'RESOLVE': {
       const def = state.pending;
       if (!def) return state;
@@ -328,6 +410,7 @@ export function reducer(state: GameState, action: Action): GameState {
       s = {
         ...s,
         pending: null,
+        advisorExchange: null,
         records: s.records.map((r) =>
           r.decisionId === def.id
             ? {

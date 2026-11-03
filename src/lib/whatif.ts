@@ -108,6 +108,7 @@ export function projectBranch(
     advisorMode: 'deterministic',
     modelLog: [],
     modelLogSeq: 0,
+    advisorExchange: null,
   };
   const effects = action === 'accept' ? def.onAccept : def.onOverride;
   const after = applyEffects(shell, effects).tracks;

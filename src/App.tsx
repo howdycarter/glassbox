@@ -1,5 +1,5 @@
 import { Eye, EyeOff, Pause, Play, RotateCcw, StepForward } from 'lucide-react';
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import SituationMap from './components/SituationMap';
 import WhatIfPanel from './components/WhatIfPanel';
 import { SCENARIOS } from './data/scenarios';
 import { ADVISOR_MODE_LABEL, getAdvisorExchange } from './lib/advisor';
+import { resolveAdvisorExchange } from './lib/advisor-live';
 import { bootLog, fmtClock, initialState, reducer } from './lib/engine';
 import { cn } from '@/lib/utils';
 import type { AdvisorMode } from './types';
@@ -52,6 +53,29 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [state.playing]);
 
+  // Live Advisor ladder: when a decision is pending in Live mode, fire
+  // the asynchronous ladder once per issued decision and dispatch the
+  // settlement into the engine. Attempt-tracking by ref keeps React
+  // StrictMode's double-effect and later re-renders from re-firing the
+  // call; the reducer's own guards make a duplicate settlement a no-op.
+  const advisorAttempts = useRef<Set<string>>(new Set());
+  const pendingDecision = state.pending;
+  const advisorModeNow = state.advisorMode;
+  const stateRecords = state.records;
+  useEffect(() => {
+    if (!pendingDecision || advisorModeNow !== 'live') return;
+    const issued = stateRecords.find((r) => r.decisionId === pendingDecision.id);
+    if (!issued) return;
+    const attemptKey = `${state.scenario.id}:${pendingDecision.id}:${issued.issuedAt}:${advisorModeNow}`;
+    if (advisorAttempts.current.has(attemptKey)) return;
+    advisorAttempts.current.add(attemptKey);
+    void resolveAdvisorExchange('live', state.scenario, pendingDecision).then((resolution) => {
+      if (resolution) {
+        dispatch({ type: 'ADVISOR_RESOLVED', decisionId: pendingDecision.id, resolution });
+      }
+    });
+  }, [pendingDecision, advisorModeNow, state.scenario, stateRecords]);
+
   const decided = state.records.filter((r) => r.action !== null).length;
   const scenario = state.scenario;
   const decisionCount = Object.keys(scenario.decisions).length;
@@ -59,7 +83,7 @@ export default function App() {
     ? (state.records.find((r) => r.decisionId === state.pending!.id)?.confidenceShown ?? null)
     : null;
   const advisorExchange = state.pending
-    ? getAdvisorExchange(state.advisorMode, scenario, state.pending)
+    ? (state.advisorExchange ?? getAdvisorExchange(state.advisorMode, scenario, state.pending))
     : null;
 
   return (

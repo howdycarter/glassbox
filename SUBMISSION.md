@@ -21,6 +21,13 @@ Cerebral Valley portal; not yet submitted.
 > (`npm run build`). Remaining before filing: demo video recorded against
 > this build (see Links), Official Rules acceptance (entrant's step), and
 > the portal form itself.
+>
+> **Update — Nov 3, 2026:** the live path is now **LIVE VERIFIED and
+> wired into the app** (see "Live vs. cached" below): `npm run
+> smoke:live` exited 0 against the real Meta Model API
+> (`muse-wonder-1.0`), and the asynchronous ladder is connected to the
+> app's decision-issue path. `npm run verify` **138 passed, 0 failed**;
+> production build green.
 
 ## The problem
 
@@ -47,7 +54,7 @@ of the glass is demonstrable, not asserted.
 
 ## How Meta AI is used
 
-The hackathon build adds a **Model Advisor**: **Muse Spark via the Meta Model
+The hackathon build adds a **Model Advisor**: **Muse Wonder via the Meta Model
 API** reads the same scenario state the operator sees at each decision point
 and returns a structured second opinion — verdict, reasoning, a confidence
 read, and provenance citations — rendered in its own panel in the same shape
@@ -86,46 +93,50 @@ Honest split, because the distinction matters:
   service, the Meta Model API client (implemented against the documented
   API shape; each shape assumption is flagged in the code. The
   build-window spike that exercises the client against the real API
-  (`npm run smoke:live`) was run on Nov 3, 2026; it did not verify the
-  live path — no live call succeeded, and its result is stated in
-  "Live vs. cached" below), the Advisor panel with
+  (`npm run smoke:live`) was run on Nov 3, 2026: after a payment method
+  was added to the Model API account it exited 0 — LIVE VERIFIED — and
+  the ladder was then wired into the app's decision-issue path; the full
+  sequence is stated in "Live vs. cached" below), the Advisor panel with
   verdict/reasoning/confidence-read/provenance rendering, contradiction
   flagging, the forensic model log, the debrief's Advisor agreement score
   and ground-truth Advisor column, the Live/Cached/Deterministic mode
   toggle with the designed failure ladder, the authored cached outputs for
-  all 10 decision points, and 47 new verification assertions covering the
-  layer (134 total, `npm run verify`) — including the live ladder
-  exercised end-to-end with mocked transports (zero network).
+  all 10 decision points, and 51 new verification assertions covering the
+  layer (138 total, `npm run verify`) — including the live ladder
+  exercised end-to-end with mocked transports (zero network) and the
+  wiring's reducer behavior.
 
 ## Live vs. cached — stated plainly
 
-The demo runs today on **authored cached Advisor outputs** for all 10
-decision points, labeled on screen as cached wherever they appear. The live
-path (Muse Spark through the Meta Model API) is implemented behind the same
-panel, prompt builder, and log — a client with a strict parser for the
-labeled output contract, exercised in the verification harness with mocked
-transports. Supplying a key does not by itself activate it in the app: the
-app resolves Advisor output on a synchronous path that serves the authored
-cache in every non-deterministic mode (`effectiveSource` in
-`src/lib/advisor.ts`), and the asynchronous live ladder
-(`resolveAdvisorExchange` in `src/lib/advisor-live.ts`) is exercised only
-by the verification harness and by `npm run smoke:live`. Wiring the ladder
-into the app's decision-issue path is a separate step, gated on the smoke
-run passing.
-**Status as of Nov 3, 2026: CACHED.** Keyed live calls have now been made
-from this codebase via `npm run smoke:live` — none succeeded. With the
-documented default model id (`muse-spark`) the API returned HTTP 404;
-with `muse-wonder-1.0` — the current Meta Model API model, probed on
-Nov 3, 2026 — the API authenticated and routed the request but declined
-the call on billing grounds (HTTP 402, payment required). The smoke run
-did not exit 0, so the live path is **not** verified and the wiring step
-gated on it was not taken; this line is updated to LIVE VERIFIED only if
-that run exits 0.
-What has **not** happened yet, stated plainly: no live call has completed
-from this codebase — every attempt failed before any model output was
-returned — so the response-shape and parser assumptions remain UNVERIFIED
-against a successful live reply. The assumptions are flagged in
-`src/lib/advisor-live.ts`, each isolated to a single constant or function.
+The demo's default rung is **authored cached Advisor outputs** for all 10
+decision points, labeled on screen as cached wherever they appear — the
+whole demo runs from that rung with no key and no network. The live path
+(Muse Wonder through the Meta Model API) sits behind the same panel,
+prompt builder, and log — a client with a strict parser for the labeled
+output contract, exercised in the verification harness with mocked
+transports.
+**Status as of Nov 3, 2026: LIVE VERIFIED, and wired into the app.** The
+sequence, stated plainly: keyed calls via `npm run smoke:live` first
+failed — the originally documented model id (`muse-spark`) returned
+HTTP 404 (retired on this account), and `muse-wonder-1.0` returned
+HTTP 402 (payment required) until a payment method was added to the
+Model API account. The re-run on Nov 3, 2026 then **exited 0 — LIVE
+VERIFIED**: a real keyed call to `https://api.meta.ai/v1/chat/completions`
+with model `muse-wonder-1.0` returned a reply that parsed under the
+output contract (DP1 verdict: concur; measured latency 7,339 ms; the API
+reported model `muse-wonder-1.0`). With the smoke run passing, the
+wiring step it gated was taken the same day: in Live mode the app fires
+the asynchronous ladder (`resolveAdvisorExchange` in
+`src/lib/advisor-live.ts`) when a decision is issued, and the engine
+records the settlement — record verdict, forensic model-log entry with
+the verbatim raw response and measured latency — via its
+`ADVISOR_RESOLVED` action. The synchronous path still serves the
+authored cache as the labeled placeholder while a live call is in
+flight, and still never labels cached output as live (`effectiveSource`
+in `src/lib/advisor.ts` is unchanged). Live mode requires the entrant's
+key in the app's environment (`VITE_META_MODEL_API_KEY`, never
+committed); with no key configured, the ladder serves the disclosed
+cache and records why.
 No cached output is ever presented as a live model response — the build
 enforces this in code (an exchange is labeled `source: live` only when a
 real keyed response was received and parsed in that call, and verification
@@ -144,7 +155,8 @@ that measurement layer.
 ## Links & fields (fill at submission)
 
 - Repository: https://github.com/howdycarter/glassbox (`main` = the hackathon
-  build, `80e3eca` + this document; verify 134/134, production build green)
+  build; verify 138/138, production build green; live path LIVE VERIFIED
+  Nov 3, 2026 per "Live vs. cached" above)
 - Demo video: `[URL after recording — record at the Nov 2 freeze build, per
   DEMO_SCRIPT.md and RECORDING_CHECKLIST.md. Note: the 57-second assembled
   video from Oct 21 predates the Model Advisor layer and does not show it;

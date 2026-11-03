@@ -30,16 +30,15 @@ import { ADVISOR_CACHE } from '../data/advisor-cache';
  * - Deterministic mode: no Advisor at all — the v4 core-only baseline.
  */
 
-/** Model the Advisor targets (Meta Model API). Config-level fact: the
-    primary is Muse Spark; Muse Wonder is the documented alternate —
-    one config switch, same output contract. ADVISOR_MODEL is the
-    display name rendered in the UI and the forensic log; ADVISOR_MODEL_ID
-    is the identifier sent in the live request body.
-    UNVERIFIED: the exact API model-id string is secondary-sourced
-    (event/docs material, Oct 2026) and is confirmed at the Day-1 spike —
-    it is a one-line config change if the portal disagrees. */
-export const ADVISOR_MODEL = 'Muse Spark (Meta Model API)';
-export const ADVISOR_MODEL_ID = 'muse-spark';
+/** Model the Advisor targets (Meta Model API). Config-level fact:
+    ADVISOR_MODEL is the display name rendered in the UI and the
+    forensic log; ADVISOR_MODEL_ID is the identifier sent in the live
+    request body. VERIFIED Nov 3, 2026 (Day-1 spike, `npm run
+    smoke:live`, exit 0): the API serves 'muse-wonder-1.0'; the
+    originally documented 'muse-spark' returns HTTP 404 on this
+    account (retired, replaced by Wonder in Meta's current lineup). */
+export const ADVISOR_MODEL = 'Muse Wonder (Meta Model API)';
+export const ADVISOR_MODEL_ID = 'muse-wonder-1.0';
 
 export const ADVISOR_MODE_LABEL: Record<AdvisorMode, string> = {
   live: 'Live Model',

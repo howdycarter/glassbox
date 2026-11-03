@@ -18,21 +18,27 @@ import {
 /* Model Advisor — LIVE Meta Model API client + the asynchronous
  * failure ladder.
  *
- * STATUS: implemented against the documented API shape; NOT yet
- * verified against the real API. No keyed call has been made from
- * this codebase. The Day-1 spike (build window, once the entrant's
- * key exists) verifies each assumption below against the real
- * endpoint and corrects them in this one file if the portal disagrees.
+ * STATUS: VERIFIED against the real API Nov 3, 2026 — the Day-1
+ * spike (`npm run smoke:live`) completed a keyed call end to end:
+ * exit 0, LIVE VERIFIED, model muse-wonder-1.0, reply received and
+ * parsed. A1–A3 held exactly as documented; A4 was corrected (see
+ * below). The ladder is wired into the app: App.tsx fires
+ * resolveAdvisorExchange when a decision pends in Live mode and the
+ * engine records the settlement via ADVISOR_RESOLVED.
  *
- * UNVERIFIED ASSUMPTIONS (secondary-sourced, Oct 2026 event/docs
- * material — each is isolated to a single constant or function):
+ * ASSUMPTIONS (each isolated to a single constant or function):
  *  A1. Base URL: https://api.meta.ai/v1 — see META_MODEL_API_BASE_URL.
+ *      VERIFIED Nov 3, 2026.
  *  A2. Endpoint shape: OpenAI-compatible POST /chat/completions with
  *      { model, messages: [{ role, content }] } and the reply text at
  *      choices[0].message.content — see buildLiveRequest /
- *      extractResponseText.
+ *      extractResponseText. VERIFIED Nov 3, 2026.
  *  A3. Auth: `Authorization: Bearer <key>` — see buildLiveRequest.
- *  A4. Model id string: 'muse-spark' — ADVISOR_MODEL_ID in advisor.ts.
+ *      VERIFIED Nov 3, 2026.
+ *  A4. Model id string: 'muse-wonder-1.0' — ADVISOR_MODEL_ID in
+ *      advisor.ts. CORRECTED at the spike: the originally documented
+ *      'muse-spark' returns HTTP 404 on this account (retired);
+ *      Wonder is the served Muse line on the Model API.
  *
  * THE LADDER (resolveAdvisorExchange):
  *   deterministic → null (Advisor silent; the v4 baseline)
@@ -52,13 +58,15 @@ import {
  *   "LIVE REQUESTED — SERVING CACHED" disclosure is driven by that
  *   label, exactly as before.
  *
- * INTEGRATION POINT (the spike's one remaining step): the engine
- * currently consumes the synchronous getAdvisorExchange at
+ * INTEGRATION (landed Nov 3, 2026, after the spike passed): the
+ * engine still consumes the synchronous getAdvisorExchange at
  * decision-issue time (src/lib/engine.ts) so UI state never waits on
- * the network. Once the API shape is verified, swap that call site to
- * resolveAdvisorExchange and record resolution.rawResponse /
- * resolution.latencyMs in the model log entry, plus resolution.liveError
- * as an action-log line when a live attempt degrades.
+ * the network — that exchange is the labeled placeholder. App.tsx
+ * then fires this ladder for the pending decision in Live mode; on
+ * settle the engine's ADVISOR_RESOLVED case records
+ * resolution.rawResponse / resolution.latencyMs in the model log
+ * entry, plus resolution.liveError as an action-log line when a live
+ * attempt degrades.
  *
  * SPIKE SUPPORT: buildLiveRequest / fetchLiveAdvisorOutput /
  * resolveAdvisorExchange accept optional baseUrl / modelId overrides
@@ -69,7 +77,7 @@ import {
  * never how its result is labeled — the honesty rules are untouched.
  */
 
-/** A1 — UNVERIFIED base URL for the Meta Model API. */
+/** A1 — base URL for the Meta Model API (VERIFIED Nov 3, 2026). */
 export const META_MODEL_API_BASE_URL = 'https://api.meta.ai/v1';
 
 /** Default per-call timeout; a slow model must degrade, not hang the demo. */
