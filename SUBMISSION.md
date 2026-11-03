@@ -1,13 +1,14 @@
 # Submission Writeup — DRAFT (not yet submitted)
 
-**Event:** Meta AI Developer Hackathon (Lablab-hosted, per event listing).
+**Event:** Meta AI Developer Hackathon (filed via the Cerebral Valley portal).
 **Track:** Startup — **Newton & Carter LLC**.
 **Project:** Glass-Box C2 — a trust-measurement copilot for AI-assisted
 operational decisions.
 **Repo:** https://github.com/howdycarter/glassbox (public; demo runs offline
 from cached outputs — see "Live vs. cached" below).
-**Submit target:** Wed Nov 4, by 5:00 PM CT internal (portal hard deadline per
-listing: Nov 4, 9:00 PM ET — re-confirm on the portal Monday Oct 26).
+**Submit target:** Wed Nov 4, 2026, by 5:00 PM CT internal (portal hard
+deadline: Nov 4, 8:00 PM CT). Prepared for filing Nov 4, 2026 via the
+Cerebral Valley portal; not yet submitted.
 
 > Bracketed items `[like this]` are filled at submission time, after the
 > Official Rules are accepted and the portal fields are confirmed. Nothing in
