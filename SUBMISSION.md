@@ -84,9 +84,11 @@ Honest split, because the distinction matters:
   no client or employer work is included in it.
 - **Built for this hackathon:** the entire Model Advisor layer — the Advisor
   service, the Meta Model API client (implemented against the documented
-  API shape; each shape assumption is flagged UNVERIFIED in the code and
-  is verified against the real API in the build-window spike, before
-  submission), the Advisor panel with
+  API shape; each shape assumption is flagged in the code. The
+  build-window spike that exercises the client against the real API
+  (`npm run smoke:live`) was run on Nov 3, 2026; it did not verify the
+  live path — no live call succeeded, and its result is stated in
+  "Live vs. cached" below), the Advisor panel with
   verdict/reasoning/confidence-read/provenance rendering, contradiction
   flagging, the forensic model log, the debrief's Advisor agreement score
   and ground-truth Advisor column, the Live/Cached/Deterministic mode
@@ -102,16 +104,27 @@ decision points, labeled on screen as cached wherever they appear. The live
 path (Muse Spark through the Meta Model API) is implemented behind the same
 panel, prompt builder, and log — a client with a strict parser for the
 labeled output contract, exercised in the verification harness with mocked
-transports — and it activates with the entrant's Meta Model API key.
-**Status as of Oct 28, 2026: CACHED.** No keyed live call has been made yet;
-the spike that verifies the live path against the real API is scripted
-(`npm run smoke:live`, one command once the key is in the shell env) and is
-run before submission if the key is exercised in the window — this line is
-updated to LIVE VERIFIED only if that run exits 0.
-What has **not** happened yet, stated plainly: no keyed call has been made
-from this codebase, and the API shape the client targets (base URL,
-endpoint, model id) is documented but UNVERIFIED until the build-window
-spike checks it against the real API — the assumptions are flagged in
+transports. Supplying a key does not by itself activate it in the app: the
+app resolves Advisor output on a synchronous path that serves the authored
+cache in every non-deterministic mode (`effectiveSource` in
+`src/lib/advisor.ts`), and the asynchronous live ladder
+(`resolveAdvisorExchange` in `src/lib/advisor-live.ts`) is exercised only
+by the verification harness and by `npm run smoke:live`. Wiring the ladder
+into the app's decision-issue path is a separate step, gated on the smoke
+run passing.
+**Status as of Nov 3, 2026: CACHED.** Keyed live calls have now been made
+from this codebase via `npm run smoke:live` — none succeeded. With the
+documented default model id (`muse-spark`) the API returned HTTP 404;
+with `muse-wonder-1.0` — the current Meta Model API model, probed on
+Nov 3, 2026 — the API authenticated and routed the request but declined
+the call on billing grounds (HTTP 402, payment required). The smoke run
+did not exit 0, so the live path is **not** verified and the wiring step
+gated on it was not taken; this line is updated to LIVE VERIFIED only if
+that run exits 0.
+What has **not** happened yet, stated plainly: no live call has completed
+from this codebase — every attempt failed before any model output was
+returned — so the response-shape and parser assumptions remain UNVERIFIED
+against a successful live reply. The assumptions are flagged in
 `src/lib/advisor-live.ts`, each isolated to a single constant or function.
 No cached output is ever presented as a live model response — the build
 enforces this in code (an exchange is labeled `source: live` only when a
