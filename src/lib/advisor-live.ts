@@ -39,6 +39,16 @@ import {
  *      advisor.ts. CORRECTED at the spike: the originally documented
  *      'muse-spark' returns HTTP 404 on this account (retired);
  *      Wonder is the served Muse line on the Model API.
+ *  A5. Reasoning effort: the request body carries reasoning_effort
+ *      'max' by default — see ADVISOR_REASONING_EFFORT. VERIFIED
+ *      Nov 3, 2026 by direct probes on this account: the parameter
+ *      is accepted and engages (max spent measurably more reasoning
+ *      tokens than high on an identical one-word prompt). Note:
+ *      Muse Wonder Full is a distinct higher-capability variant
+ *      available only in Muse Code with a subscription
+ *      (dev.meta.ai/docs, Nov 3, 2026) — it is NOT selectable on
+ *      the Model API at any effort setting; 'max' is the strongest
+ *      API configuration that exists.
  *
  * THE LADDER (resolveAdvisorExchange):
  *   deterministic → null (Advisor silent; the v4 baseline)
@@ -69,10 +79,11 @@ import {
  * attempt degrades.
  *
  * SPIKE SUPPORT: buildLiveRequest / fetchLiveAdvisorOutput /
- * resolveAdvisorExchange accept optional baseUrl / modelId overrides
- * so the Day-1 smoke check (scripts/smoke-live.ts, `npm run
- * smoke:live`) can probe alternate A1/A4 shapes from environment
- * variables without editing this file. Defaults are exactly the
+ * resolveAdvisorExchange accept optional baseUrl / modelId /
+ * reasoningEffort overrides so the Day-1 smoke check
+ * (scripts/smoke-live.ts, `npm run smoke:live`) can probe alternate
+ * A1/A4/A5 shapes from environment variables without editing this
+ * file. Defaults are exactly the
  * documented constants above; overrides change where the call goes,
  * never how its result is labeled — the honesty rules are untouched.
  */
@@ -93,6 +104,7 @@ export interface LiveRequest {
     model: string;
     messages: { role: 'user'; content: string }[];
     temperature: number;
+    reasoning_effort: string;
   };
 }
 
@@ -133,13 +145,27 @@ export function liveApiKey(): string | null {
   return typeof key === 'string' && key.trim().length > 0 ? key.trim() : null;
 }
 
-/** Build the request for a decision point (A1–A4 live here).
+/** A5 — reasoning effort for live calls: the strongest tier the
+    Model API serves ('max'; tiers run minimal → max). Overridable
+    for experimentation: the app build reads
+    VITE_ADVISOR_REASONING_EFFORT, the smoke scripts pass
+    ADVISOR_REASONING_EFFORT through the spike overrides. */
+export const ADVISOR_REASONING_EFFORT = 'max';
+
+/** The reasoning effort a live call runs at when no spike override
+    is given: the build-environment override, else A5's default. */
+export function advisorReasoningEffort(): string {
+  const v = import.meta.env?.VITE_ADVISOR_REASONING_EFFORT as string | undefined;
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : ADVISOR_REASONING_EFFORT;
+}
+
+/** Build the request for a decision point (A1–A5 live here).
     Optional overrides exist for the Day-1 spike only (see header);
     omitted, they are exactly the documented constants. */
 export function buildLiveRequest(
   prompt: string,
   apiKey: string,
-  overrides: { baseUrl?: string; modelId?: string } = {},
+  overrides: { baseUrl?: string; modelId?: string; reasoningEffort?: string } = {},
 ): LiveRequest {
   return {
     url: `${overrides.baseUrl ?? META_MODEL_API_BASE_URL}/chat/completions`,
@@ -152,6 +178,7 @@ export function buildLiveRequest(
       model: overrides.modelId ?? ADVISOR_MODEL_ID,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
+      reasoning_effort: overrides.reasoningEffort ?? advisorReasoningEffort(),
     },
   };
 }
@@ -184,6 +211,37 @@ export function extractResponseModel(json: unknown): string | null {
   if (typeof json !== 'object' || json === null) return null;
   const model = (json as { model?: unknown }).model;
   return typeof model === 'string' && model.length > 0 ? model : null;
+}
+
+/** Token usage the API reports, when present (A2). reasoningTokens
+    is the A5 evidence: a max-effort call spends measurably more of
+    them than a lower tier on the same prompt. Null when the API
+    returns no usage block — never estimated, never fabricated. */
+export interface LiveUsage {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  reasoningTokens: number | null;
+  totalTokens: number | null;
+}
+
+export function extractUsage(json: unknown): LiveUsage | null {
+  if (typeof json !== 'object' || json === null) return null;
+  const usage = (json as { usage?: unknown }).usage;
+  if (typeof usage !== 'object' || usage === null) return null;
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const u = usage as Record<string, unknown>;
+  const details = u.completion_tokens_details;
+  const reasoning =
+    typeof details === 'object' && details !== null
+      ? num((details as Record<string, unknown>).reasoning_tokens)
+      : null;
+  return {
+    promptTokens: num(u.prompt_tokens),
+    completionTokens: num(u.completion_tokens),
+    reasoningTokens: reasoning,
+    totalTokens: num(u.total_tokens),
+  };
 }
 
 const VERDICTS: AdvisorVerdict[] = ['concur', 'lean-alternate', 'disagree'];
@@ -278,6 +336,8 @@ export interface LiveSuccess {
   /** Model string reported by the API, when present (A2). */
   responseModel: string | null;
   latencyMs: number;
+  /** Token usage reported by the API, when present (A2/A5). */
+  usage?: LiveUsage | null;
 }
 
 /**
@@ -290,10 +350,11 @@ export async function fetchLiveAdvisorOutput(opts: {
   apiKey: string;
   transport?: AdvisorTransport;
   timeoutMs?: number;
-  /** Day-1 spike probes (A1/A4 alternates); defaults are the
+  /** Day-1 spike probes (A1/A4/A5 alternates); defaults are the
       documented constants. */
   baseUrl?: string;
   modelId?: string;
+  reasoningEffort?: string;
 }): Promise<LiveSuccess> {
   const transport = opts.transport ?? fetchTransport;
   const timeoutMs = opts.timeoutMs ?? LIVE_CALL_TIMEOUT_MS;
@@ -301,6 +362,7 @@ export async function fetchLiveAdvisorOutput(opts: {
   const req = buildLiveRequest(prompt, opts.apiKey, {
     baseUrl: opts.baseUrl,
     modelId: opts.modelId,
+    reasoningEffort: opts.reasoningEffort,
   });
   const controller = new AbortController();
   // The timeout races the transport rather than relying on the
@@ -337,7 +399,13 @@ export async function fetchLiveAdvisorOutput(opts: {
   if (!text || !output) {
     throw new LiveAdvisorError('live response did not match the Advisor output contract', 'parse');
   }
-  return { output, rawText: text, responseModel: extractResponseModel(res.json), latencyMs };
+  return {
+    output,
+    rawText: text,
+    responseModel: extractResponseModel(res.json),
+    latencyMs,
+    usage: extractUsage(res.json),
+  };
 }
 
 /** The ladder's product: everything the engine/forensic log needs. */
@@ -351,6 +419,9 @@ export interface AdvisorResolution {
   /** Set when Live was requested but the ladder degraded to cache —
       the degradation is recorded, never silent. */
   liveError: string | null;
+  /** Token usage for a live exchange (A2/A5 evidence); null/absent
+      for cached resolutions and when the API reports none. */
+  usage?: LiveUsage | null;
 }
 
 function cachedResolution(
@@ -384,6 +455,7 @@ export async function resolveAdvisorExchange(
     timeoutMs?: number;
     baseUrl?: string;
     modelId?: string;
+    reasoningEffort?: string;
   } = {},
 ): Promise<AdvisorResolution | null> {
   if (mode === 'deterministic') return null;
@@ -402,6 +474,7 @@ export async function resolveAdvisorExchange(
       timeoutMs: opts.timeoutMs,
       baseUrl: opts.baseUrl,
       modelId: opts.modelId,
+      reasoningEffort: opts.reasoningEffort,
     });
     const exchange: AdvisorExchange = {
       key: advisorKey(scenario.id, decision.id),
@@ -411,7 +484,13 @@ export async function resolveAdvisorExchange(
       model: live.responseModel ?? ADVISOR_MODEL,
       output: live.output,
     };
-    return { exchange, rawResponse: live.rawText, latencyMs: live.latencyMs, liveError: null };
+    return {
+      exchange,
+      rawResponse: live.rawText,
+      latencyMs: live.latencyMs,
+      liveError: null,
+      usage: live.usage ?? null,
+    };
   } catch (err) {
     const reason =
       err instanceof LiveAdvisorError

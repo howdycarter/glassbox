@@ -68,6 +68,7 @@ import {
   serializeAdvisorResponse,
 } from '../src/lib/advisor';
 import {
+  ADVISOR_REASONING_EFFORT,
   parseAdvisorResponse,
   resolveAdvisorExchange,
   type AdvisorResolution,
@@ -760,6 +761,13 @@ async function sectionM5() {
       captured.body.model === ADVISOR_MODEL_ID &&
       captured.body.messages[0].content.includes('DP1') &&
       captured.body.messages[0].content.includes('Verdict: <concur'),
+  );
+  check(
+    'live request body runs the Advisor at reasoning_effort max by default (A5; strongest API tier)',
+    captured !== null &&
+      captured.body.reasoning_effort === ADVISOR_REASONING_EFFORT &&
+      ADVISOR_REASONING_EFFORT === 'max',
+    captured ? `effort=${captured.body.reasoning_effort}` : 'transport never called',
   );
   check(
     'a parsed live reply is labeled source=live — the only path to that label',

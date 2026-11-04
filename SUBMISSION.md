@@ -101,8 +101,8 @@ Honest split, because the distinction matters:
   flagging, the forensic model log, the debrief's Advisor agreement score
   and ground-truth Advisor column, the Live/Cached/Deterministic mode
   toggle with the designed failure ladder, the authored cached outputs for
-  all 10 decision points, and 51 new verification assertions covering the
-  layer (138 total, `npm run verify`) — including the live ladder
+  all 10 decision points, and 52 new verification assertions covering the
+  layer (139 total, `npm run verify`) — including the live ladder
   exercised end-to-end with mocked transports (zero network) and the
   wiring's reducer behavior.
 
@@ -137,6 +137,20 @@ in `src/lib/advisor.ts` is unchanged). Live mode requires the entrant's
 key in the app's environment (`VITE_META_MODEL_API_KEY`, never
 committed); with no key configured, the ladder serves the disclosed
 cache and records why.
+**Update — later Nov 3, 2026: the live path now runs at the strongest
+configuration the Model API serves.** Live calls carry
+`reasoning_effort: "max"` by default (overridable for experimentation;
+assumption A5 in `src/lib/advisor-live.ts`). Meta's documentation places
+Muse Wonder Full only in Muse Code with a subscription — it is not
+selectable on the Model API at any setting — so `muse-wonder-1.0` at
+`max` is the ceiling. Verified the same evening at that configuration:
+three consecutive `npm run smoke:live` runs exited 0 — LIVE VERIFIED —
+DP1 verdict concur on all three, measured latencies 15,232 / 7,831 /
+10,539 ms, and API-reported reasoning-token usage of 643 / 843 / 891 per
+call evidencing the max tier engaged; a comparison run at
+`reasoning_effort: "high"` also exited 0 (concur, 6,324 ms, 713
+reasoning tokens). Verification suite: 139 assertions, all passing;
+production build green.
 No cached output is ever presented as a live model response — the build
 enforces this in code (an exchange is labeled `source: live` only when a
 real keyed response was received and parsed in that call, and verification
@@ -155,7 +169,7 @@ that measurement layer.
 ## Links & fields (fill at submission)
 
 - Repository: https://github.com/howdycarter/glassbox (`main` = the hackathon
-  build; verify 138/138, production build green; live path LIVE VERIFIED
+  build; verify 139/139, production build green; live path LIVE VERIFIED
   Nov 3, 2026 per "Live vs. cached" above)
 - Demo video: `[URL after recording — record at the Nov 2 freeze build, per
   DEMO_SCRIPT.md and RECORDING_CHECKLIST.md. Note: the 57-second assembled

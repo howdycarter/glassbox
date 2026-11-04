@@ -12,6 +12,8 @@
  * shape — alternate shapes with zero code edits:
  *   META_MODEL_API_BASE_URL=https://…   A1: alternate base URL
  *   META_MODEL_ID=…                     A4: alternate model id
+ *   ADVISOR_REASONING_EFFORT=high       A5: alternate effort tier
+ *                                       (default: 'max')
  *   META_SMOKE_DECISION=DP1             decision point to ask about
  *
  * Exit codes:
@@ -25,6 +27,7 @@
  */
 import { ADVISOR_MODEL_ID } from '../src/lib/advisor';
 import {
+  ADVISOR_REASONING_EFFORT,
   META_MODEL_API_BASE_URL,
   resolveAdvisorExchange,
 } from '../src/lib/advisor-live';
@@ -38,12 +41,14 @@ const env = (name: string): string | undefined => {
 
 const baseUrl = env('META_MODEL_API_BASE_URL') ?? META_MODEL_API_BASE_URL;
 const modelId = env('META_MODEL_ID') ?? ADVISOR_MODEL_ID;
+const reasoningEffort = env('ADVISOR_REASONING_EFFORT') ?? ADVISOR_REASONING_EFFORT;
 const decisionKey = env('META_SMOKE_DECISION') ?? 'DP1';
 const decision = DECISIONS[decisionKey];
 
 console.log('Glass-Box live smoke check (Day-1 spike)');
 console.log(`  endpoint : ${baseUrl}/chat/completions`);
 console.log(`  model    : ${modelId}`);
+console.log(`  effort   : reasoning_effort=${reasoningEffort}`);
 console.log(`  decision : ${decisionKey}${decision ? ` — ${decision.title}` : ''}`);
 
 if (!decision) {
@@ -67,6 +72,7 @@ const res = await resolveAdvisorExchange('live', DEFAULT_SCENARIO, decision, {
   apiKey,
   baseUrl,
   modelId,
+  reasoningEffort,
 });
 
 if (res && res.exchange.source === 'live') {
@@ -75,6 +81,13 @@ if (res && res.exchange.source === 'live') {
   console.log(`  latency  : ${res.latencyMs} ms`);
   console.log(`  verdict  : ${res.exchange.output.verdict}`);
   console.log(`  headline : ${res.exchange.output.headline}`);
+  if (res.usage) {
+    console.log(
+      `  usage    : prompt=${res.usage.promptTokens} completion=${res.usage.completionTokens} reasoning=${res.usage.reasoningTokens} total=${res.usage.totalTokens}`,
+    );
+  } else {
+    console.log('  usage    : not reported by the API for this call');
+  }
   console.log('  → The ladder labels this exchange source=live. GO for');
   console.log('    live mode (engine call-site swap is the remaining step).');
   process.exit(0);
