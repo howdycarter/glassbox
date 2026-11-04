@@ -91,6 +91,29 @@ import {
 /** A1 — base URL for the Meta Model API (VERIFIED Nov 3, 2026). */
 export const META_MODEL_API_BASE_URL = 'https://api.meta.ai/v1';
 
+/** A6 — dev-server proxy path. In `vite dev` ONLY, live calls route
+    same-origin through the dev server (vite.config.ts,
+    advisorLiveProxy), which performs the upstream request from Node
+    and attaches the key server-side. Root cause (diagnosed Nov 3,
+    2026): on proxy-only networks the browser's direct egress to
+    api.meta.ai fails before any request is sent
+    (net::ERR_TUNNEL_CONNECTION_FAILED → "Failed to fetch"), while
+    Node's fetch — which honors the proxy env — succeeds; the API's
+    own CORS headers are permissive and were never the blocker.
+    Production builds are unaffected: import.meta.env.DEV is false
+    there and calls go to A1 directly, exactly as verified. The proxy
+    changes only transport — labeling is untouched: an exchange is
+    'live' only when a real reply returns through the proxy and
+    parses, and any proxy failure degrades to disclosed cache like
+    any other failure. */
+export const ADVISOR_DEV_PROXY_BASE_URL = '/__advisor';
+
+/** The base URL a live call uses when no spike override is given:
+    the dev proxy under `vite dev`, A1 everywhere else. */
+export function liveRequestBaseUrl(): string {
+  return import.meta.env?.DEV ? ADVISOR_DEV_PROXY_BASE_URL : META_MODEL_API_BASE_URL;
+}
+
 /** Default per-call timeout; a slow model must degrade, not hang the demo. */
 export const LIVE_CALL_TIMEOUT_MS = 20_000;
 
@@ -168,7 +191,7 @@ export function buildLiveRequest(
   overrides: { baseUrl?: string; modelId?: string; reasoningEffort?: string } = {},
 ): LiveRequest {
   return {
-    url: `${overrides.baseUrl ?? META_MODEL_API_BASE_URL}/chat/completions`,
+    url: `${overrides.baseUrl ?? liveRequestBaseUrl()}/chat/completions`,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -68,7 +68,10 @@ import {
   serializeAdvisorResponse,
 } from '../src/lib/advisor';
 import {
+  ADVISOR_DEV_PROXY_BASE_URL,
   ADVISOR_REASONING_EFFORT,
+  META_MODEL_API_BASE_URL,
+  liveRequestBaseUrl,
   parseAdvisorResponse,
   resolveAdvisorExchange,
   type AdvisorResolution,
@@ -768,6 +771,13 @@ async function sectionM5() {
       captured.body.reasoning_effort === ADVISOR_REASONING_EFFORT &&
       ADVISOR_REASONING_EFFORT === 'max',
     captured ? `effort=${captured.body.reasoning_effort}` : 'transport never called',
+  );
+  check(
+    'outside the dev server the live base URL is the documented API (A6: the same-origin proxy is dev-only transport; this harness builds non-dev, so it must see A1)',
+    liveRequestBaseUrl() === META_MODEL_API_BASE_URL &&
+      META_MODEL_API_BASE_URL === 'https://api.meta.ai/v1' &&
+      ADVISOR_DEV_PROXY_BASE_URL === '/__advisor',
+    `base=${liveRequestBaseUrl()}`,
   );
   check(
     'a parsed live reply is labeled source=live — the only path to that label',

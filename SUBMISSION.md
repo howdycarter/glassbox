@@ -102,7 +102,7 @@ Honest split, because the distinction matters:
   and ground-truth Advisor column, the Live/Cached/Deterministic mode
   toggle with the designed failure ladder, the authored cached outputs for
   all 10 decision points, and 52 new verification assertions covering the
-  layer (139 total, `npm run verify`) — including the live ladder
+  layer (140 total, `npm run verify`) — including the live ladder
   exercised end-to-end with mocked transports (zero network) and the
   wiring's reducer behavior.
 
@@ -149,8 +149,24 @@ DP1 verdict concur on all three, measured latencies 15,232 / 7,831 /
 10,539 ms, and API-reported reasoning-token usage of 643 / 843 / 891 per
 call evidencing the max tier engaged; a comparison run at
 `reasoning_effort: "high"` also exited 0 (concur, 6,324 ms, 713
-reasoning tokens). Verification suite: 139 assertions, all passing;
+reasoning tokens). Verification suite: 140 assertions, all passing;
 production build green.
+**Update — later Nov 3, 2026: the in-browser Live view was diagnosed
+and fixed.** Under `vite dev`, the app's live calls route same-origin
+through a dev-server proxy (`advisorLiveProxy` in `vite.config.ts`;
+assumption A6 in `src/lib/advisor-live.ts`) which performs the
+upstream request from Node and attaches the key server-side. Root
+cause: on the recording machine's proxy-only network, the browser's
+direct egress to api.meta.ai fails before any request is sent
+(`net::ERR_TUNNEL_CONNECTION_FAILED` → "Failed to fetch") while
+Node's fetch, which honors the proxy environment, succeeds — the
+API's own CORS headers are permissive and were never the blocker.
+Production builds are unaffected (the proxy exists only in the dev
+server), labeling semantics are unchanged (a proxy failure degrades
+to disclosed cache like any other failure), and the fix was proven
+in a real headless-Chromium run: Live mode settled to a genuine
+`muse-wonder-1.0` LIVE response on DP1 in two consecutive
+click-throughs.
 No cached output is ever presented as a live model response — the build
 enforces this in code (an exchange is labeled `source: live` only when a
 real keyed response was received and parsed in that call, and verification
