@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "verify": "bash -c 'vite build --ssr scripts/verify-v2.ts --outDir dist-ssr --logLevel warn && node dist-ssr/verify-v2.js; rc=$?; rm -rf dist-ssr; exit $rc'",
+    "verify": "bash -c 'vite build --ssr scripts/verify-v2.ts --outDir dist-ssr --logLevel warn && node dist-ssr/verify-v2.js; rc=$?; rm -rf dist-ssr; if [ $rc -ne 0 ]; then exit $rc; fi; vite build --ssr scripts/verify-bid.ts --outDir dist-ssr-bid --logLevel warn && node dist-ssr-bid/verify-bid.js; rc=$?; rm -rf dist-ssr-bid; exit $rc'",
+    "verify:bid": "bash -c 'vite build --ssr scripts/verify-bid.ts --outDir dist-ssr-bid --logLevel warn && node dist-ssr-bid/verify-bid.js; rc=$?; rm -rf dist-ssr-bid; exit $rc'",
     "smoke:live": "bash -c 'vite build --ssr scripts/smoke-live.ts --outDir dist-ssr --logLevel warn && node dist-ssr/smoke-live.js; rc=$?; rm -rf dist-ssr; exit $rc'"
   },
   "dependencies": {
