@@ -8,8 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "verify": "bash -c 'vite build --ssr scripts/verify-v2.ts --outDir dist-ssr --logLevel warn && node dist-ssr/verify-v2.js; rc=$?; rm -rf dist-ssr; if [ $rc -ne 0 ]; then exit $rc; fi; vite build --ssr scripts/verify-bid.ts --outDir dist-ssr-bid --logLevel warn && node dist-ssr-bid/verify-bid.js; rc=$?; rm -rf dist-ssr-bid; exit $rc'",
+    "verify": "bash -c 'vite build --ssr scripts/verify-v2.ts --outDir dist-ssr --logLevel warn && node dist-ssr/verify-v2.js; rc=$?; rm -rf dist-ssr; if [ $rc -ne 0 ]; then exit $rc; fi; vite build --ssr scripts/verify-bid.ts --outDir dist-ssr-bid --logLevel warn && node dist-ssr-bid/verify-bid.js; rc=$?; rm -rf dist-ssr-bid; if [ $rc -ne 0 ]; then exit $rc; fi; vite build --ssr scripts/verify-pregate.ts --outDir dist-ssr-pregate --logLevel warn && node dist-ssr-pregate/verify-pregate.js; rc=$?; rm -rf dist-ssr-pregate; exit $rc'",
     "verify:bid": "bash -c 'vite build --ssr scripts/verify-bid.ts --outDir dist-ssr-bid --logLevel warn && node dist-ssr-bid/verify-bid.js; rc=$?; rm -rf dist-ssr-bid; exit $rc'",
+    "verify:pregate": "bash -c 'vite build --ssr scripts/verify-pregate.ts --outDir dist-ssr-pregate --logLevel warn && node dist-ssr-pregate/verify-pregate.js; rc=$?; rm -rf dist-ssr-pregate; exit $rc'",
     "smoke:live": "bash -c 'vite build --ssr scripts/smoke-live.ts --outDir dist-ssr --logLevel warn && node dist-ssr/smoke-live.js; rc=$?; rm -rf dist-ssr; exit $rc'"
   },
   "dependencies": {
