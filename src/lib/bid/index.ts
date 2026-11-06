@@ -43,3 +43,25 @@ export {
 export { appendForensicEntry, nextForensicSeq } from './forensic';
 
 export { handleDispositionRequest, parseRequestBody, type DispositionHttpResult } from './handler';
+
+export {
+  CLAIM_KINDS,
+  FINDING_PENALTY,
+  PREGATE_THRESHOLDS,
+  S3_COMPLEMENT_NOTE,
+  UNBOUND_RECORD_VALUE,
+  buildPregateDecisionDef,
+  checkClaims,
+  extractLoadBearingClaims,
+  formatFindingLine,
+  hashPackage,
+  parsePackageFromMarkdown,
+  runPregatePass,
+  type CanonEntry,
+  type ClaimCheck,
+  type ExtractedClaim,
+  type PregateFinding,
+  type PregateInput,
+  type PregatePackage,
+  type PregateReport,
+} from './pregate';
