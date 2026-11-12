@@ -6,7 +6,7 @@ The headline metric is the **appropriate-reliance rate**: accept-when-right plus
 
 Where conventional explainable AI renders an explanation and stops, Glass-Box treats explanation as a **control surface**: every recommendation is issued with confidence decomposed into visible, revisable drivers (evidence strength, evidence agreement, input staleness, source reliability); per-input **provenance** (source, model and version, timestamp, data age, integrity flags); **contradiction surfacing**, so conflicting feeds collapse confidence visibly instead of fusing silently; and **operator re-weighting** of decision criteria, recomputed live through the same deterministic evaluation engine that resolves live decisions — a projection can never diverge from a resolution. Every recommendation, intervention, and outcome is written to a forensic action log, and a calibration debrief scores the run against ground truth.
 
-This public repository is the build prepared for the **Meta AI Developer Hackathon (October 26 – November 4, 2026)**. Glass-Box is independent R&D by Newton & Carter LLC, a human-systems research firm that builds software. No company past performance is claimed for this work; the prototype is feasibility evidence.
+This public repository is the build prepared for the **Meta AI Developer Hackathon (October 26 – November 4, 2026)**. Glass-Box is independent R&D by [Newton & Carter LLC](https://newtonandcarter.com), a human-systems research firm that builds software. No company past performance is claimed for this work; the prototype is feasibility evidence.
 
 ## The testbed
 
